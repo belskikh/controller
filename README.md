@@ -1,31 +1,137 @@
-# DualSense Agent Control
+# DualSense Codex Control
 
-Bluetooth-only DualSense control surface for Codex Desktop on macOS.
+Turn a Bluetooth DualSense into a focused hardware remote for Codex Desktop on
+macOS. Approve commands, move between tasks, control dictation, stop work, and
+feel when Codex needs your attention.
 
-The project is being built hardware-first. The initial gate verifies that the
-controller can be read and controlled over Bluetooth before any agent adapter
-is enabled.
+![DualSense to Codex control map](docs/assets/dualsense-codex-map.png)
 
-## Bluetooth spike
+> [!IMPORTANT]
+> The daemon is deliberately fail-closed. Outside Codex, every input is locked
+> except `Circle`, which brings Codex to the front. USB controllers are rejected.
 
-Pair the controller in macOS, then run:
+## What it does
 
-```sh
-npm run spike:bt -- list
-npm run spike:bt -- input
-npm run spike:bt -- feedback --confirm-output
+- Maps physical DualSense input to a small, versioned set of Codex actions.
+- Controls Codex through live macOS Accessibility elements, never saved screen
+  coordinates.
+- Keeps action and voice mutations behind separate opt-in flags.
+- Sends two short vibration pulses when a new Codex task needs attention.
+- Survives controller power cycles with a watchdog and capped reconnect
+  backoff.
+- Includes a safe simulator and Bluetooth diagnostics for development without
+  controlling Codex.
+
+## Button map
+
+The mapping below has been exercised end-to-end on a paired Bluetooth
+controller unless noted otherwise.
+
+| DualSense input | Codex action |
+| --- | --- |
+| `Circle` | Bring Codex to the front and unlock the remaining controls |
+| `Create` | Create a new task |
+| `L1` | Toggle between the last two opened tasks |
+| `D-pad up / down` | Move visually through task history |
+| `D-pad right` | Start dictation, then transcribe and send |
+| `Mute` | Cancel dictation without sending |
+| `R2` | Allow once |
+| `R1` | Open approval options and allow similar commands |
+| `L2` | Deny |
+| `Square` | Stop the current operation |
+| `Triangle` | Clear the current input draft |
+
+Unmapped controls are inert. D-pad navigation also resets the next `L1` press
+to the previous task, keeping the two-task toggle predictable.
+
+## How it works
+
+```mermaid
+flowchart LR
+    controller["Bluetooth DualSense"] --> hid["HID input normalization"]
+    hid --> engine["Safety engine<br/>lock + debounce + routing"]
+    foreground["Frontmost app monitor"] --> engine
+    engine --> adapter["Codex Accessibility adapters"]
+    adapter --> helper["Native macOS helper"]
+    helper --> codex["Codex Desktop"]
+    codex --> attention["Attention monitor"]
+    attention --> feedback["Feedback policy"]
+    engine --> feedback
+    feedback --> controller
 ```
 
-`list` only enumerates matching HID devices. `input` reads controller events
-without sending output reports. `feedback` is the only command allowed to
-change the lightbar, player LEDs, or rumble, and it requires the explicit
-`--confirm-output` flag. USB devices are rejected by both active commands.
+1. `node-hid` and `dualsense-ts` open a wireless DualSense and normalize HID
+   reports into button press/release events.
+2. The controller engine debounces duplicate reports and checks its lock before
+   routing an action.
+3. A native helper continuously reports whether Codex is frontmost. The engine
+   locks on startup, disconnect, foreground-monitor failure, and shutdown.
+4. Narrow Accessibility adapters resolve one unique, enabled Codex element by
+   its current role and label. Ambiguous or missing targets fail without
+   clicking anything.
+5. Some Electron controls report a successful `AXPress` without acting. For
+   those controls, the helper derives a mouse click from the matched element's
+   current AX frame. There are no hard-coded coordinates.
+6. State and attention events flow back to the controller as lightbar,
+   player-LED, and rumble feedback.
 
-## Safe core simulator
+## Requirements
 
-The control engine starts locked. `Circle` is the only global action: it
-simulates bringing Codex to the front, which unlocks the remaining bindings.
-Test the mapping without controlling any application:
+- macOS with Codex Desktop installed
+- a DualSense paired in **System Settings → Bluetooth**
+- Node.js and npm
+- Xcode Command Line Tools for the native Objective-C helper
+- Accessibility permission for the terminal or process running the daemon
+
+This project is Bluetooth-only by design. A controller connected only over USB
+is detected and rejected rather than used as a fallback.
+
+## Quick start
+
+Install dependencies, validate the project, then start the daemon:
+
+```sh
+npm install
+npm run check
+npm test
+npm run daemon -- --enable-actions --enable-voice
+```
+
+The daemon command builds both the TypeScript project and the native helper
+before starting. Run it from a macOS process that already has Accessibility
+permission.
+
+### Mutation flags
+
+Running without flags keeps the external integrations in dry-run mode:
+
+```sh
+npm run daemon
+```
+
+Enable the two mutation boundaries independently:
+
+```sh
+# Approvals, navigation, task creation, stopping, and draft clearing
+npm run daemon -- --enable-actions
+
+# Native Codex dictation controls
+npm run daemon -- --enable-voice
+
+# Complete controller
+npm run daemon -- --enable-actions --enable-voice
+```
+
+When Codex loses focus, the daemon locks immediately and cancels active
+dictation. `Circle` remains available globally so the controller can bring
+Codex back.
+
+## Explore safely
+
+### Core simulator
+
+The simulator exercises config parsing, debounce, locking, and routing without
+opening or controlling any application:
 
 ```sh
 npm run simulate
@@ -34,79 +140,92 @@ right.trigger.button press
 mute press
 ```
 
-Bindings live in `config.json`. The simulator accepts
-`<control> <press|release>` lines and prints normalized decisions as JSON.
+It accepts `<control> <press|release>` lines and prints normalized decisions as
+JSON. Physical bindings live in [`config.json`](config.json).
 
-The currently validated Codex approval bindings are:
-
-- `R2`: `Allow once`
-- `R1`: `Approval options` → `Allow similar commands`
-- `L2`: `Deny`
-
-All three approval paths have been exercised end-to-end over Bluetooth on the
-paired controller. The daemon resolves a single enabled Accessibility element
-by its exact live label and derives mouse coordinates from that element's
-current frame; it does not store fixed screen coordinates.
-
-The validated, corrected architecture and delivery gates are documented in
-`docs/implementation-plan.md`.
-
-## Daemon
-
-The end-to-end daemon derives its lock state from the frontmost application.
-Outside Codex, only `Circle` is accepted. When Codex becomes frontmost, the
-remaining controls unlock automatically. By default the daemon does not mutate
-Codex or start its built-in dictation:
+### Bluetooth diagnostics
 
 ```sh
-npm run daemon
+# List matching HID devices
+npm run spike:bt -- list
+
+# Read input reports without sending controller output
+npm run spike:bt -- input
+
+# Explicitly test lightbar, player LEDs, and low-intensity rumble
+npm run spike:bt -- feedback --confirm-output
 ```
 
-Enable the two external mutation boundaries independently only after dry-run
-validation:
+`feedback` is the only diagnostic allowed to change controller output, and it
+requires `--confirm-output`.
+
+## Feedback and reconnect behavior
+
+- A blue lightbar and center player LED indicate that Codex controls are
+  unlocked.
+- Errors use a short error feedback sequence.
+- A new non-running Codex activity card that requires attention produces two
+  short vibration pulses. Existing cards form a silent baseline after a daemon
+  or Codex restart, so old notifications are not replayed.
+- After a disconnect, HID error, or watchdog timeout, the daemon closes the
+  old device and retries discovery with exponential backoff capped at 30
+  seconds.
+- Reconnection accepts a new macOS HID path but never preserves the unlocked
+  state.
+
+## Repository layout
+
+| Path | Responsibility |
+| --- | --- |
+| [`config.json`](config.json) | Physical button bindings and debounce settings |
+| [`src/core/`](src/core) | Config validation, lock policy, debounce, routing, and simulator input |
+| [`src/daemon.ts`](src/daemon.ts) | Transport lifecycle, monitors, action dispatch, and shutdown |
+| [`src/dualsense/`](src/dualsense) | Bluetooth HID input and Sony output reports |
+| [`src/adapters/`](src/adapters) | Codex actions and native dictation |
+| [`src/macos/`](src/macos) | TypeScript boundary for the native helper and monitors |
+| [`helpers/macos-control/`](helpers/macos-control) | Narrow macOS Accessibility implementation |
+| [`src/runtime/`](src/runtime) | Reconnect backoff and connection watchdog |
+| [`src/launchd/`](src/launchd) | launchd plist generation |
+| [`docs/implementation-plan.md`](docs/implementation-plan.md) | Hardware validation record and acceptance matrix |
+
+## Development
+
+Run the complete local verification set before committing:
 
 ```sh
-npm run daemon -- --enable-actions
-npm run daemon -- --enable-voice
-npm run daemon -- --enable-actions --enable-voice
+npm run check
+npm test
+make -C helpers/macos-control
+git diff --check
 ```
 
-Codex controls:
+When adding or renaming an action, update the action type, config binding,
+daemon dispatcher, adapter, tests, this README, and the validation matrix
+together.
 
-- `Circle`: bring Codex to the front and unlock its controls
-- `Create`: create a new Codex chat
-- `Triangle`: clear the complete draft from the Codex input field
-- `L1`: toggle back and forth between the last two opened Codex tasks
-- `D-pad right`: toggle between `Dictate` and `Transcribe and send`
-- `D-pad up` / `D-pad down`: visually up / down through Codex task history
-- DualSense `Mute`: `Stop dictation` without sending
+### launchd package
 
-Voice state is resolved from the currently visible Codex controls on every
-press. It is not inferred from a potentially stale local toggle.
-
-Input clearing resolves exactly one enabled, editable Accessibility text area
-in the focused Codex window and sets its value to empty. It fails without
-changing anything if Codex is not frontmost or the input cannot be resolved
-unambiguously.
-
-Codex attention notifications produce two short DualSense vibration pulses.
-The daemon watches the application's live Accessibility activity cards,
-ignores `Running` cards, and reacts when a new card requires attention.
-Existing cards form a silent baseline after daemon or Codex restart, so startup
-does not replay old notifications. This feedback can occur while Codex is in
-the background; controller actions remain locked until Codex is frontmost.
-
-The daemon remains alive when the controller is powered off. It retries
-Bluetooth discovery with capped exponential backoff, accepts a new macOS HID
-path after reconnection, and keeps actions locked until Codex is frontmost.
-
-Generate a local launchd package for inspection:
+Generate and inspect a local launchd plist:
 
 ```sh
 npm run package:launchd
 plutil -lint dist/com.codex.dualsense-control.plist
 ```
 
-Generation does not install or load the agent. The plist uses stable absolute
-runtime paths, enables both Codex action boundaries, and writes logs under
-`~/Library/Logs/DualSenseCodex`.
+This only writes the package under `dist/`; it does not install or load the
+agent. Login startup is intentionally left as an explicit user decision.
+
+## Current boundaries
+
+- Codex Desktop and macOS Accessibility are the only application-control path.
+- Approval buttons exist only while Codex is asking for approval; pressing an
+  approval binding at any other time safely fails.
+- UI control labels and roles must remain compatible with the installed Codex
+  Desktop build.
+- Cursor, Handy, generic pointer control, USB fallback, and ownership of a
+  separate `codex app-server` are outside this project's scope.
+- Generated build output, the native helper binary, coverage, logs,
+  `node_modules/`, and `dist/` remain untracked.
+
+For detailed hardware gates and the latest acceptance matrix, see the
+[`validated implementation plan`](docs/implementation-plan.md).
