@@ -1,4 +1,4 @@
-# DualSense Agent Control: validated implementation plan
+# Controller: validated implementation plan
 
 ## Constraints confirmed locally
 

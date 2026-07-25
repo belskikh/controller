@@ -1,8 +1,9 @@
-# DualSense Codex Controller
+# Controller
 
-This repository contains the Bluetooth-only DualSense control daemon for
-Codex Desktop on macOS. Version `v0` has been validated on the paired
-controller and should be treated as the working baseline.
+This repository contains a work-in-progress controller daemon for AI
+applications on macOS. The only supported integration today is Bluetooth-only
+DualSense control for Codex Desktop. Version `v0` has been validated on the
+paired controller and should be treated as the working baseline.
 
 ## Safety and scope
 

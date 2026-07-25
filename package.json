@@ -1,9 +1,9 @@
 {
-  "name": "dualsense-agent-control",
+  "name": "controller",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Bluetooth DualSense control surface for Codex Desktop on macOS.",
+  "description": "Work-in-progress hardware controller for AI applications on macOS.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",

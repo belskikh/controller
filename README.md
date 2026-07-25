@@ -1,32 +1,38 @@
-# DualSense Codex Control
+# Controller
 
-Turn a Bluetooth DualSense into a focused hardware remote for Codex Desktop on
-macOS. Approve commands, move between tasks, control dictation, stop work, and
-feel when Codex needs your attention.
+A work-in-progress hardware controller for AI applications on macOS. It can
+approve commands, move between tasks, control dictation, stop work, and provide
+attention feedback.
 
-![DualSense to Codex control map](docs/assets/dualsense-codex-map.png)
+![Current controller map](docs/assets/dualsense-codex-map.png)
 
-> [!IMPORTANT]
-> The daemon is deliberately fail-closed. Outside Codex, every input is locked
-> except `Circle`, which brings Codex to the front. USB controllers are rejected.
+> [!WARNING]
+> **Work in progress:** this project is under active development. Its behavior,
+> compatibility, and safety guarantees may change; nothing is guaranteed to work.
+
+## Current support
+
+The only supported configuration today is a Bluetooth DualSense with Codex
+Desktop on macOS. Other controllers and AI applications are not supported yet.
 
 ## What it does
 
-- Maps physical DualSense input to a small, versioned set of Codex actions.
-- Controls Codex through live macOS Accessibility elements, never saved screen
-  coordinates.
+- Maps physical controller input to a small, versioned set of application
+  actions.
+- Controls the current target application through live macOS Accessibility
+  elements, never saved screen coordinates.
 - Keeps action and voice mutations behind separate opt-in flags.
-- Sends two short vibration pulses when a new Codex task needs attention.
+- Sends two short vibration pulses when a new task needs attention.
 - Survives controller power cycles with a watchdog and capped reconnect
   backoff.
 - Includes a safe simulator and Bluetooth diagnostics for development without
-  controlling Codex.
+  controlling the target application.
 
 ## Button map
 
-| DualSense input | Codex action |
+| Controller input | Current action |
 | --- | --- |
-| `Circle` | Bring Codex to the front and unlock the remaining controls |
+| `Circle` | Bring the target application to the front and unlock the remaining controls |
 | `Create` | Create a new task |
 | `L1` | Toggle between the last two opened tasks |
 | `D-pad up / down` | Move visually through task history |
@@ -46,25 +52,26 @@ the previous task, keeping the two-task toggle predictable.
 
 ```mermaid
 flowchart LR
-    controller["Bluetooth DualSense"] --> hid["HID input normalization"]
+    controller["Bluetooth controller"] --> hid["HID input normalization"]
     hid --> engine["Safety engine<br/>lock + debounce + routing"]
     foreground["Frontmost app monitor"] --> engine
-    engine --> adapter["Codex Accessibility adapters"]
+    engine --> adapter["Application Accessibility adapters"]
     adapter --> helper["Native macOS helper"]
-    helper --> codex["Codex Desktop"]
-    codex --> attention["Attention monitor"]
+    helper --> app["Current AI application"]
+    app --> attention["Attention monitor"]
     attention --> feedback["Feedback policy"]
     engine --> feedback
     feedback --> controller
 ```
 
-1. `node-hid` and `dualsense-ts` open a wireless DualSense and normalize HID
+1. `node-hid` and `dualsense-ts` open the currently supported wireless
+   controller and normalize HID
    reports into button press/release events.
 2. The controller engine debounces duplicate reports and checks its lock before
    routing an action.
-3. A native helper continuously reports whether Codex is frontmost. The engine
+3. A native helper continuously reports whether the target application is frontmost. The engine
    locks on startup, disconnect, foreground-monitor failure, and shutdown.
-4. Narrow Accessibility adapters resolve one unique, enabled Codex element by
+4. Narrow Accessibility adapters resolve one unique, enabled application element by
    its current role and label. Ambiguous or missing targets fail without
    clicking anything.
 5. Some Electron controls report a successful `AXPress` without acting. For
@@ -73,16 +80,16 @@ flowchart LR
 6. State and attention events flow back to the controller as lightbar,
    player-LED, and rumble feedback.
 
-## Requirements
+## Requirements for the current integration
 
-- macOS with Codex Desktop installed
-- a DualSense paired in **System Settings → Bluetooth**
+- macOS with the currently supported AI application installed
+- the currently supported controller paired in **System Settings → Bluetooth**
 - Node.js and npm
 - Xcode Command Line Tools for the native Objective-C helper
 - Accessibility permission for the terminal or process running the daemon
 
-This project is Bluetooth-only by design. A controller connected only over USB
-is detected and rejected rather than used as a fallback.
+The current integration is Bluetooth-only by design. A controller connected only
+over USB is detected and rejected rather than used as a fallback.
 
 ## Quick start
 
@@ -113,16 +120,16 @@ Enable the two mutation boundaries independently:
 # Approvals, navigation, task creation, stopping, draft clearing, and modes
 npm run daemon -- --enable-actions
 
-# Native Codex dictation controls
+# Native dictation controls
 npm run daemon -- --enable-voice
 
 # Complete controller
 npm run daemon -- --enable-actions --enable-voice
 ```
 
-When Codex loses focus, the daemon locks immediately and cancels active
+When the target application loses focus, the daemon locks immediately and cancels active
 dictation. `Circle` remains available globally so the controller can bring
-Codex back.
+the application back.
 
 ## Explore safely
 
@@ -159,12 +166,12 @@ requires `--confirm-output`.
 
 ## Feedback and reconnect behavior
 
-- A blue lightbar and center player LED indicate that Codex controls are
+- A blue lightbar and center player LED indicate that application controls are
   unlocked.
 - Errors use a short error feedback sequence.
-- A new non-running Codex activity card that requires attention produces two
+- A new non-running application activity card that requires attention produces two
   short vibration pulses. Existing cards form a silent baseline after a daemon
-  or Codex restart, so old notifications are not replayed.
+  or application restart, so old notifications are not replayed.
 - After a disconnect, HID error, or watchdog timeout, the daemon closes the
   old device and retries discovery with exponential backoff capped at 30
   seconds.
@@ -178,8 +185,8 @@ requires `--confirm-output`.
 | [`config.json`](config.json) | Physical button bindings and debounce settings |
 | [`src/core/`](src/core) | Config validation, lock policy, debounce, routing, and simulator input |
 | [`src/daemon.ts`](src/daemon.ts) | Transport lifecycle, monitors, action dispatch, and shutdown |
-| [`src/dualsense/`](src/dualsense) | Bluetooth HID input and Sony output reports |
-| [`src/adapters/`](src/adapters) | Codex actions and native dictation |
+| [`src/dualsense/`](src/dualsense) | Bluetooth HID input and current controller output reports |
+| [`src/adapters/`](src/adapters) | Current application actions and native dictation |
 | [`src/macos/`](src/macos) | TypeScript boundary for the native helper and monitors |
 | [`helpers/macos-control/`](helpers/macos-control) | Narrow macOS Accessibility implementation |
 | [`src/runtime/`](src/runtime) | Reconnect backoff and connection watchdog |
