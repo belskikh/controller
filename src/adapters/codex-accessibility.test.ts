@@ -11,6 +11,7 @@ import type {
   ControlMethod,
   ControlRole,
   ControlStatus,
+  CyclePermissionModeResult,
   MatchResult,
   PreviousChatResult,
   PressResult,
@@ -35,6 +36,10 @@ class FakeControlClient implements ControlClient {
     bundleIdentifier: string;
     confirm: boolean;
   }> = [];
+  readonly permissionModeCycles: Array<{
+    bundleIdentifier: string;
+    confirm: boolean;
+  }> = [];
   readonly calls: Array<{
     bundleIdentifier: string;
     role: ControlRole;
@@ -42,7 +47,6 @@ class FakeControlClient implements ControlClient {
     confirm: boolean;
     method?: ControlMethod;
   }> = [];
-
   statusValue: ControlStatus = {
     accessibilityTrusted: true,
     frontmostApplication: {
@@ -114,6 +118,20 @@ class FakeControlClient implements ControlClient {
       candidateCount: 2,
       pressed: confirm,
       selectedIndex: 1,
+    };
+  }
+
+  async cyclePermissionMode(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<CyclePermissionModeResult> {
+    this.permissionModeCycles.push({ bundleIdentifier, confirm });
+    return {
+      availableModes: ["Ask for approval", "Approve for me", "Full access"],
+      bundleIdentifier,
+      currentMode: "Ask for approval",
+      selected: confirm,
+      targetMode: confirm ? "Approve for me" : null,
     };
   }
 
@@ -279,7 +297,25 @@ describe("CodexAccessibilityAdapter", () => {
     ]);
   });
 
-  it("toggles back and forward between the last two tasks", async () => {
+  it("cycles the permission mode only when mutations are enabled", async () => {
+    const dryRunClient = new FakeControlClient();
+    const liveClient = new FakeControlClient();
+
+    await new CodexAccessibilityAdapter(dryRunClient).cyclePermissionMode();
+    await new CodexAccessibilityAdapter(
+      liveClient,
+      true,
+    ).cyclePermissionMode();
+
+    expect(dryRunClient.permissionModeCycles).toEqual([
+      { bundleIdentifier: CODEX_BUNDLE_IDENTIFIER, confirm: false },
+    ]);
+    expect(liveClient.permissionModeCycles).toEqual([
+      { bundleIdentifier: CODEX_BUNDLE_IDENTIFIER, confirm: true },
+    ]);
+  });
+
+  it("toggles back and forward without synthesizing Command key events", async () => {
     const client = new FakeControlClient();
     const adapter = new CodexAccessibilityAdapter(client, true);
 
@@ -287,24 +323,56 @@ describe("CodexAccessibilityAdapter", () => {
     await adapter.toggleLastTask();
     await adapter.toggleLastTask();
 
-    expect(client.keys).toEqual([
-      { key: "[", modifiers: ["cmd", "shift"], confirm: true },
-      { key: "]", modifiers: ["cmd", "shift"], confirm: true },
-      { key: "[", modifiers: ["cmd", "shift"], confirm: true },
+    expect(client.calls).toEqual([
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "menu-item",
+        label: "Previous Chat",
+        confirm: true,
+        method: "ax",
+      },
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "menu-item",
+        label: "Next Chat",
+        confirm: true,
+        method: "ax",
+      },
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "menu-item",
+        label: "Previous Chat",
+        confirm: true,
+        method: "ax",
+      },
     ]);
+    expect(client.keys).toHaveLength(0);
   });
 
-  it("uses Codex history shortcuts for bidirectional navigation", async () => {
+  it("uses Codex menu actions for bidirectional navigation", async () => {
     const client = new FakeControlClient();
     const adapter = new CodexAccessibilityAdapter(client, true);
 
     await adapter.switchSession(-1);
     await adapter.switchSession(1);
 
-    expect(client.keys).toEqual([
-      { key: "[", modifiers: ["cmd", "shift"], confirm: true },
-      { key: "]", modifiers: ["cmd", "shift"], confirm: true },
+    expect(client.calls).toEqual([
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "menu-item",
+        label: "Previous Chat",
+        confirm: true,
+        method: "ax",
+      },
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "menu-item",
+        label: "Next Chat",
+        confirm: true,
+        method: "ax",
+      },
     ]);
+    expect(client.keys).toHaveLength(0);
     expect(client.previousChats).toHaveLength(0);
   });
 
@@ -316,6 +384,10 @@ describe("CodexAccessibilityAdapter", () => {
     await adapter.switchSession(1);
     await adapter.toggleLastTask();
 
-    expect(client.keys.map(({ key }) => key)).toEqual(["[", "]", "["]);
+    expect(client.calls.map(({ label }) => label)).toEqual([
+      "Previous Chat",
+      "Next Chat",
+      "Previous Chat",
+    ]);
   });
 });

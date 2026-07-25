@@ -36,6 +36,9 @@
     "dpad.down": {
       "press": "switchNext"
     },
+    "dpad.left": {
+      "press": "permissionMode.next"
+    },
     "dpad.right": {
       "press": "voice.toggle"
     }

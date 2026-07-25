@@ -10,6 +10,7 @@ const config: ControllerConfig = {
     cross: { press: "accept" },
     mute: { press: "voice.cancel" },
     "dpad.up": { press: "switchPrevious" },
+    "dpad.left": { press: "permissionMode.next" },
     "dpad.right": { press: "voice.toggle" },
     circle: { press: "focusCodex" },
     triangle: { press: "clearInput" },
@@ -75,6 +76,16 @@ describe("ControllerEngine", () => {
     const engine = new ControllerEngine({ ...config, startEnabled: true });
     expect(engine.handle({ control: "mute", phase: "press" }, 100)).toEqual([
       { type: "action", action: "voice.cancel" },
+    ]);
+  });
+
+  it("maps D-pad left to cycling the Codex permission mode", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    expect(
+      engine.handle({ control: "dpad.left", phase: "press" }, 100),
+    ).toEqual([
+      { type: "action", action: "permissionMode.next" },
     ]);
   });
 

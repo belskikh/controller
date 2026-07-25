@@ -13,6 +13,8 @@ export interface CodexControlLabels {
   decline: string;
   interrupt: string;
   newThread: string;
+  nextThread: string;
+  previousThread: string;
 }
 
 export const DEFAULT_CODEX_CONTROL_LABELS: CodexControlLabels = {
@@ -22,6 +24,8 @@ export const DEFAULT_CODEX_CONTROL_LABELS: CodexControlLabels = {
   decline: "Deny",
   interrupt: "Stop",
   newThread: "New Chat",
+  nextThread: "Next Chat",
+  previousThread: "Previous Chat",
 };
 
 export class CodexAccessibilityError extends Error {
@@ -98,34 +102,39 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
     await this.press("button", this.labels.interrupt);
   }
 
+  async cyclePermissionMode(): Promise<void> {
+    await this.assertFrontmost();
+    const result = await this.client.cyclePermissionMode(
+      CODEX_BUNDLE_IDENTIFIER,
+      this.mutationsEnabled,
+    );
+    if (result.selected !== this.mutationsEnabled) {
+      throw new CodexAccessibilityError(
+        "The Codex permission mode could not be changed.",
+      );
+    }
+  }
+
   async newThread(): Promise<void> {
     await this.press("menu-item", this.labels.newThread);
   }
 
   async toggleLastTask(): Promise<void> {
     const direction = this.lastTaskToggleDirection;
-    await this.sendSessionShortcut(direction);
+    await this.navigateSession(direction);
     this.lastTaskToggleDirection = direction === -1 ? 1 : -1;
   }
 
   async switchSession(direction: -1 | 1): Promise<void> {
-    await this.sendSessionShortcut(direction);
+    await this.navigateSession(direction);
     this.lastTaskToggleDirection = -1;
   }
 
-  private async sendSessionShortcut(direction: -1 | 1): Promise<void> {
-    await this.assertFrontmost();
-    const key = direction === -1 ? "[" : "]";
-    const result = await this.client.key(
-      key,
-      ["cmd", "shift"],
-      this.mutationsEnabled,
-    );
-    if (result.sent !== this.mutationsEnabled) {
-      throw new CodexAccessibilityError(
-        `Unexpected shortcut result for "${key}".`,
-      );
-    }
+  private async navigateSession(direction: -1 | 1): Promise<void> {
+    const label = direction === -1
+      ? this.labels.previousThread
+      : this.labels.nextThread;
+    await this.press("menu-item", label);
   }
 
   private async press(role: ControlRole, label: string): Promise<void> {

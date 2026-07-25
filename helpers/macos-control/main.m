@@ -1327,6 +1327,30 @@ static int WatchFrontmost(NSArray<NSString *> *arguments) {
     return 0;
 }
 
+static BOOL IsAttentionNotificationButton(AXUIElementRef element) {
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    NSString *description = StringAttribute(element, kAXDescriptionAttribute);
+    id enabled = CopyAttribute(element, kAXEnabledAttribute);
+    return (
+        [role isEqualToString:(__bridge NSString *)kAXButtonRole]
+        && [enabled isKindOfClass:NSNumber.class]
+        && [enabled boolValue]
+        && [description containsString:@"Open notification"]
+        && ![description containsString:@". Running."]
+    );
+}
+
+static BOOL IsAwaitingApprovalNotificationButton(AXUIElementRef element) {
+    if (!IsAttentionNotificationButton(element)) {
+        return NO;
+    }
+    NSString *description = StringAttribute(element, kAXDescriptionAttribute);
+    return (
+        [description containsString:@". Awaiting approval."]
+        || [description containsString:@". Needs input."]
+    );
+}
+
 static void CountAttentionNotifications(
     AXUIElementRef element,
     NSUInteger depth,
@@ -1337,14 +1361,7 @@ static void CountAttentionNotifications(
         return;
     }
 
-    NSString *role = StringAttribute(element, kAXRoleAttribute);
-    NSString *description = StringAttribute(element, kAXDescriptionAttribute);
-    id enabled = CopyAttribute(element, kAXEnabledAttribute);
-    if ([role isEqualToString:(__bridge NSString *)kAXButtonRole]
-        && [enabled isKindOfClass:NSNumber.class]
-        && [enabled boolValue]
-        && [description containsString:@"Open notification"]
-        && ![description containsString:@". Running."]) {
+    if (IsAttentionNotificationButton(element)) {
         *count += 1;
     }
 
@@ -1388,6 +1405,262 @@ static NSUInteger AttentionNotificationCount(pid_t processIdentifier) {
     }
     CFRelease(application);
     return count;
+}
+
+static void CollectAwaitingApprovalButtons(
+    AXUIElementRef element,
+    NSUInteger depth,
+    NSMutableArray<NSDictionary *> *candidates
+) {
+    if (depth > 30 || candidates.count >= 500) {
+        return;
+    }
+
+    if (IsAwaitingApprovalNotificationButton(element)) {
+        NSDictionary *position = PointAttribute(element, kAXPositionAttribute);
+        NSDictionary *size = SizeAttribute(element, kAXSizeAttribute);
+        if (position == nil || size == nil) {
+            [candidates addObject:@{
+                @"element": (__bridge id)element,
+                @"position": NSNull.null,
+                @"size": NSNull.null,
+            }];
+        } else {
+            [candidates addObject:@{
+                @"element": (__bridge id)element,
+                @"position": position,
+                @"size": size,
+            }];
+        }
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectAwaitingApprovalButtons(
+            (__bridge AXUIElementRef)child,
+            depth + 1,
+            candidates
+        );
+        if (candidates.count >= 500) {
+            return;
+        }
+    }
+}
+
+static int OpenLatestAwaitingApproval(NSArray<NSString *> *arguments) {
+    if (!AXIsProcessTrusted()) {
+        return Fail(@"Accessibility permission is not granted to macos-control.");
+    }
+
+    NSString *bundleIdentifier = nil;
+    BOOL confirmed = NO;
+    for (NSUInteger index = 0; index < arguments.count;) {
+        NSString *argument = arguments[index];
+        if ([argument isEqualToString:@"--bundle-id"]) {
+            bundleIdentifier = ValueAfter(arguments, index);
+            if (bundleIdentifier == nil) {
+                return Fail(@"--bundle-id requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--confirm"]) {
+            confirmed = YES;
+            index += 1;
+        } else {
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Unknown open-latest-awaiting-approval argument: %@",
+                    argument]
+            );
+        }
+    }
+    if (bundleIdentifier.length == 0) {
+        return Fail(@"open-latest-awaiting-approval requires --bundle-id.");
+    }
+
+    NSArray<NSRunningApplication *> *applications =
+        [NSRunningApplication
+            runningApplicationsWithBundleIdentifier:bundleIdentifier];
+    if (applications.count != 1) {
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one running %@ application; found %lu.",
+                bundleIdentifier,
+                (unsigned long)applications.count]
+        );
+    }
+
+    AXUIElementRef application = AXUIElementCreateApplication(
+        applications.firstObject.processIdentifier
+    );
+    NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
+    id rawWindows = CopyAttribute(application, kAXWindowsAttribute);
+    if ([rawWindows isKindOfClass:NSArray.class]) {
+        for (id window in (NSArray *)rawWindows) {
+            if (CFGetTypeID((__bridge CFTypeRef)window)
+                != AXUIElementGetTypeID()) {
+                continue;
+            }
+            CollectAwaitingApprovalButtons(
+                (__bridge AXUIElementRef)window,
+                0,
+                candidates
+            );
+        }
+    }
+
+    [candidates sortUsingComparator:^NSComparisonResult(
+        NSDictionary *first,
+        NSDictionary *second
+    ) {
+        id firstPosition = first[@"position"];
+        id secondPosition = second[@"position"];
+        if (![firstPosition isKindOfClass:NSDictionary.class]) {
+            return [secondPosition isKindOfClass:NSDictionary.class]
+                ? NSOrderedDescending
+                : NSOrderedSame;
+        }
+        if (![secondPosition isKindOfClass:NSDictionary.class]) {
+            return NSOrderedAscending;
+        }
+        double firstY = [firstPosition[@"y"] doubleValue];
+        double secondY = [secondPosition[@"y"] doubleValue];
+        if (firstY < secondY) return NSOrderedAscending;
+        if (firstY > secondY) return NSOrderedDescending;
+        double firstX = [firstPosition[@"x"] doubleValue];
+        double secondX = [secondPosition[@"x"] doubleValue];
+        if (firstX < secondX) return NSOrderedAscending;
+        if (firstX > secondX) return NSOrderedDescending;
+        return NSOrderedSame;
+    }];
+
+    BOOL opened = NO;
+    if (confirmed && candidates.count > 0) {
+        if (!ApplicationIsFrontmost(bundleIdentifier)) {
+            CFRelease(application);
+            return Fail(
+                @"Refusing to open a notification because Codex is not frontmost."
+            );
+        }
+        NSDictionary *target = candidates.firstObject;
+        if (![target[@"position"] isKindOfClass:NSDictionary.class]
+            || ![target[@"size"] isKindOfClass:NSDictionary.class]) {
+            CFRelease(application);
+            return Fail(@"Latest notification has no valid Accessibility frame.");
+        }
+        opened = ClickElementCenter(
+            (__bridge AXUIElementRef)target[@"element"]
+        );
+        if (!opened) {
+            CFRelease(application);
+            return Fail(@"Latest notification has an invalid click frame.");
+        }
+    }
+
+    WriteJSON(
+        @{
+            @"bundleIdentifier": bundleIdentifier,
+            @"candidateCount": @(candidates.count),
+            @"opened": @(opened),
+        },
+        stdout
+    );
+    CFRelease(application);
+    return 0;
+}
+
+static int OpenThread(NSArray<NSString *> *arguments) {
+    NSString *bundleIdentifier = nil;
+    NSString *threadIdentifier = nil;
+    BOOL confirmed = NO;
+    for (NSUInteger index = 0; index < arguments.count;) {
+        NSString *argument = arguments[index];
+        if ([argument isEqualToString:@"--bundle-id"]) {
+            bundleIdentifier = ValueAfter(arguments, index);
+            if (bundleIdentifier == nil) {
+                return Fail(@"--bundle-id requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--thread-id"]) {
+            threadIdentifier = ValueAfter(arguments, index);
+            if (threadIdentifier == nil) {
+                return Fail(@"--thread-id requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--confirm"]) {
+            confirmed = YES;
+            index += 1;
+        } else {
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Unknown open-thread argument: %@", argument]
+            );
+        }
+    }
+    if (bundleIdentifier.length == 0 || threadIdentifier.length == 0) {
+        return Fail(@"open-thread requires --bundle-id and --thread-id.");
+    }
+    NSRegularExpression *threadPattern = [
+        NSRegularExpression
+        regularExpressionWithPattern:
+            @"^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$"
+        options:0
+        error:nil
+    ];
+    NSRange identifierRange = NSMakeRange(0, threadIdentifier.length);
+    if ([threadPattern numberOfMatchesInString:threadIdentifier
+                                      options:0
+                                        range:identifierRange] != 1) {
+        return Fail(@"open-thread received an invalid thread identifier.");
+    }
+
+    NSArray<NSRunningApplication *> *applications =
+        [NSRunningApplication
+            runningApplicationsWithBundleIdentifier:bundleIdentifier];
+    if (applications.count != 1) {
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one running %@ application; found %lu.",
+                bundleIdentifier,
+                (unsigned long)applications.count]
+        );
+    }
+
+    BOOL opened = NO;
+    if (confirmed) {
+        if (!ApplicationIsFrontmost(bundleIdentifier)) {
+            return Fail(
+                @"Refusing to open a task because Codex is not frontmost."
+            );
+        }
+        NSString *rawURL = [
+            NSString stringWithFormat:@"codex://threads/%@", threadIdentifier
+        ];
+        NSURL *url = [NSURL URLWithString:rawURL];
+        if (url == nil) {
+            return Fail(@"Could not construct the Codex task URL.");
+        }
+        opened = [NSWorkspace.sharedWorkspace openURL:url];
+        if (!opened) {
+            return Fail(@"macOS refused to open the Codex task URL.");
+        }
+    }
+
+    WriteJSON(
+        @{
+            @"bundleIdentifier": bundleIdentifier,
+            @"candidateCount": @1,
+            @"opened": @(opened),
+            @"threadId": threadIdentifier,
+        },
+        stdout
+    );
+    return 0;
 }
 
 static void WriteAttentionState(
@@ -1637,6 +1910,281 @@ static int PressControl(NSArray<NSString *> *arguments) {
     return 0;
 }
 
+static NSArray<NSString *> *PermissionModeLabels(void) {
+    return @[@"Ask for approval", @"Approve for me", @"Full access"];
+}
+
+static void CollectPermissionModeCandidates(
+    AXUIElementRef element,
+    NSUInteger depth,
+    NSMutableArray<NSDictionary *> *candidates
+) {
+    if (depth > 30 || candidates.count >= 100) {
+        return;
+    }
+
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    NSString *label = ControlLabel(element);
+    id enabled = CopyAttribute(element, kAXEnabledAttribute);
+    NSDictionary *position = PointAttribute(element, kAXPositionAttribute);
+    NSDictionary *size = SizeAttribute(element, kAXSizeAttribute);
+    if (role != nil
+        && IsInteractiveRole(role)
+        && [PermissionModeLabels() containsObject:label ?: @""]
+        && [enabled isKindOfClass:NSNumber.class]
+        && [enabled boolValue]
+        && position != nil
+        && size != nil) {
+        [candidates addObject:@{
+            @"element": (__bridge id)element,
+            @"label": label,
+            @"position": position,
+            @"size": size,
+        }];
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectPermissionModeCandidates(
+            (__bridge AXUIElementRef)child,
+            depth + 1,
+            candidates
+        );
+        if (candidates.count >= 100) {
+            return;
+        }
+    }
+}
+
+static NSArray<NSDictionary *> *PermissionModeCandidates(
+    AXUIElementRef application
+) {
+    NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
+    id rawWindows = CopyAttribute(application, kAXWindowsAttribute);
+    if (![rawWindows isKindOfClass:NSArray.class]) {
+        return candidates;
+    }
+    for (id window in (NSArray *)rawWindows) {
+        if (CFGetTypeID((__bridge CFTypeRef)window)
+            != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectPermissionModeCandidates(
+            (__bridge AXUIElementRef)window,
+            0,
+            candidates
+        );
+    }
+    return candidates;
+}
+
+static NSDictionary *PermissionModeOption(
+    NSArray<NSDictionary *> *candidates,
+    NSString *label,
+    NSDictionary *selector
+) {
+    for (NSDictionary *candidate in candidates) {
+        if (![candidate[@"label"] isEqualToString:label]) {
+            continue;
+        }
+        if (!FramesMatch(
+            candidate[@"position"],
+            candidate[@"size"],
+            selector[@"position"],
+            selector[@"size"]
+        )) {
+            return candidate;
+        }
+    }
+    return nil;
+}
+
+static BOOL CandidateHasSelectorOrigin(
+    NSDictionary *candidate,
+    NSDictionary *selector
+) {
+    NSDictionary *candidatePosition = candidate[@"position"];
+    NSDictionary *selectorPosition = selector[@"position"];
+    return (
+        fabs([candidatePosition[@"x"] doubleValue]
+            - [selectorPosition[@"x"] doubleValue]) < 0.5
+        && fabs([candidatePosition[@"y"] doubleValue]
+            - [selectorPosition[@"y"] doubleValue]) < 0.5
+    );
+}
+
+static int CyclePermissionMode(NSArray<NSString *> *arguments) {
+    if (!AXIsProcessTrusted()) {
+        return Fail(@"Accessibility permission is not granted to macos-control.");
+    }
+
+    NSString *bundleIdentifier = nil;
+    BOOL confirmed = NO;
+    for (NSUInteger index = 0; index < arguments.count;) {
+        NSString *argument = arguments[index];
+        if ([argument isEqualToString:@"--bundle-id"]) {
+            bundleIdentifier = ValueAfter(arguments, index);
+            if (bundleIdentifier == nil) {
+                return Fail(@"--bundle-id requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--confirm"]) {
+            confirmed = YES;
+            index += 1;
+        } else {
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Unknown cycle-permission-mode argument: %@",
+                    argument]
+            );
+        }
+    }
+    if (bundleIdentifier.length == 0) {
+        return Fail(@"cycle-permission-mode requires --bundle-id.");
+    }
+
+    NSArray<NSRunningApplication *> *applications =
+        [NSRunningApplication
+            runningApplicationsWithBundleIdentifier:bundleIdentifier];
+    if (applications.count != 1) {
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one running %@ application; found %lu.",
+                bundleIdentifier,
+                (unsigned long)applications.count]
+        );
+    }
+
+    AXUIElementRef application = AXUIElementCreateApplication(
+        applications.firstObject.processIdentifier
+    );
+    NSArray<NSDictionary *> *initialCandidates =
+        PermissionModeCandidates(application);
+    if (initialCandidates.count != 1) {
+        CFRelease(application);
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one closed permission-mode selector; found %lu.",
+                (unsigned long)initialCandidates.count]
+        );
+    }
+
+    NSDictionary *selector = initialCandidates.firstObject;
+    NSString *currentMode = selector[@"label"];
+    if (!confirmed) {
+        WriteJSON(
+            @{
+                @"availableModes": @[currentMode],
+                @"bundleIdentifier": bundleIdentifier,
+                @"currentMode": currentMode,
+                @"selected": @NO,
+                @"targetMode": NSNull.null,
+            },
+            stdout
+        );
+        CFRelease(application);
+        return 0;
+    }
+    if (!ApplicationIsFrontmost(bundleIdentifier)) {
+        CFRelease(application);
+        return Fail(
+            @"Refusing to change permission mode because Codex is not frontmost."
+        );
+    }
+    if (!ClickElementCenter(
+        (__bridge AXUIElementRef)selector[@"element"]
+    )) {
+        CFRelease(application);
+        return Fail(@"Permission-mode selector has an invalid click frame.");
+    }
+
+    NSArray<NSDictionary *> *openCandidates = @[];
+    NSMutableArray<NSString *> *availableModes = [NSMutableArray array];
+    NSString *targetMode = nil;
+    NSDictionary *target = nil;
+    for (NSUInteger attempt = 0; attempt < 20 && target == nil; attempt += 1) {
+        usleep(50000);
+        openCandidates = PermissionModeCandidates(application);
+        [availableModes removeAllObjects];
+        for (NSString *label in PermissionModeLabels()) {
+            if (PermissionModeOption(openCandidates, label, selector) != nil) {
+                [availableModes addObject:label];
+            }
+        }
+        NSUInteger currentIndex =
+            [PermissionModeLabels() indexOfObject:currentMode];
+        for (
+            NSUInteger offset = 1;
+            offset < PermissionModeLabels().count;
+            offset += 1
+        ) {
+            NSUInteger index =
+                (currentIndex + offset) % PermissionModeLabels().count;
+            NSString *label = PermissionModeLabels()[index];
+            NSDictionary *candidate =
+                PermissionModeOption(openCandidates, label, selector);
+            if (candidate != nil) {
+                targetMode = label;
+                target = candidate;
+                break;
+            }
+        }
+    }
+    if (target == nil || targetMode == nil) {
+        CFRelease(application);
+        return Fail(
+            @"Permission-mode picker did not expose another enabled built-in mode."
+        );
+    }
+    if (!ApplicationIsFrontmost(bundleIdentifier)
+        || !ClickElementCenter(
+            (__bridge AXUIElementRef)target[@"element"]
+        )) {
+        CFRelease(application);
+        return Fail(@"Permission-mode option could not be selected safely.");
+    }
+
+    BOOL selected = NO;
+    for (NSUInteger attempt = 0; attempt < 20 && !selected; attempt += 1) {
+        usleep(50000);
+        for (
+            NSDictionary *candidate
+            in PermissionModeCandidates(application)
+        ) {
+            if ([candidate[@"label"] isEqualToString:targetMode]
+                && CandidateHasSelectorOrigin(candidate, selector)) {
+                selected = YES;
+                break;
+            }
+        }
+    }
+    if (!selected) {
+        CFRelease(application);
+        return Fail(
+            @"Permission-mode selection was not reflected by the live selector."
+        );
+    }
+
+    WriteJSON(
+        @{
+            @"availableModes": availableModes,
+            @"bundleIdentifier": bundleIdentifier,
+            @"currentMode": currentMode,
+            @"selected": @YES,
+            @"targetMode": targetMode,
+        },
+        stdout
+    );
+    CFRelease(application);
+    return 0;
+}
+
 static int SendKey(NSArray<NSString *> *arguments) {
     if (!AXIsProcessTrusted()) {
         return Fail(@"Accessibility permission is not granted to macos-control.");
@@ -1742,6 +2290,9 @@ static void WriteUsage(void) {
         "  macos-control activate --bundle-id ID [--confirm]\n"
         "  macos-control watch-frontmost --bundle-id ID\n"
         "  macos-control watch-attention --bundle-id ID\n"
+        "  macos-control open-thread --bundle-id ID --thread-id ID [--confirm]\n"
+        "  macos-control open-latest-awaiting-approval --bundle-id ID [--confirm]\n"
+        "  macos-control cycle-permission-mode --bundle-id ID [--confirm]\n"
         "  macos-control previous-chat --bundle-id ID [--confirm]\n"
         "  macos-control clear-input --bundle-id ID [--confirm]\n"
         "  macos-control match --bundle-id ID --role ROLE --label EXACT\n"
@@ -1806,6 +2357,21 @@ int main(int argc, const char *argv[]) {
         }
         if ([command isEqualToString:@"watch-attention"]) {
             return WatchAttention(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"open-thread"]) {
+            return OpenThread(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"open-latest-awaiting-approval"]) {
+            return OpenLatestAwaitingApproval(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"cycle-permission-mode"]) {
+            return CyclePermissionMode(
                 [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
             );
         }

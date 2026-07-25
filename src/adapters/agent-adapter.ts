@@ -6,6 +6,7 @@ export interface AgentAdapter {
   focus(): Promise<void>;
   interrupt(): Promise<void>;
   newThread(): Promise<void>;
+  cyclePermissionMode(): Promise<void>;
   toggleLastTask(): Promise<void>;
   switchSession(direction: -1 | 1): Promise<void>;
 }

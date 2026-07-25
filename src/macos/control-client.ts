@@ -58,6 +58,14 @@ export interface PreviousChatResult {
   selectedIndex: number;
 }
 
+export interface CyclePermissionModeResult {
+  availableModes: string[];
+  bundleIdentifier: string;
+  currentMode: string;
+  selected: boolean;
+  targetMode: string | null;
+}
+
 export interface ControlClient {
   status(): Promise<ControlStatus>;
   activate(
@@ -82,6 +90,10 @@ export interface ControlClient {
     bundleIdentifier: string,
     confirm: boolean,
   ): Promise<PreviousChatResult>;
+  cyclePermissionMode(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<CyclePermissionModeResult>;
   press(
     bundleIdentifier: string,
     role: ControlRole,
@@ -166,6 +178,18 @@ export class MacOSControlClient implements ControlClient {
   ): Promise<PreviousChatResult> {
     return this.run<PreviousChatResult>([
       "previous-chat",
+      "--bundle-id",
+      bundleIdentifier,
+      ...(confirm ? ["--confirm"] : []),
+    ]);
+  }
+
+  async cyclePermissionMode(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<CyclePermissionModeResult> {
+    return this.run<CyclePermissionModeResult>([
+      "cycle-permission-mode",
       "--bundle-id",
       bundleIdentifier,
       ...(confirm ? ["--confirm"] : []),

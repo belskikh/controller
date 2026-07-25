@@ -11,6 +11,7 @@ import type {
   ControlMethod,
   ControlRole,
   ControlStatus,
+  CyclePermissionModeResult,
   MatchResult,
   PreviousChatResult,
   PressResult,
@@ -100,6 +101,19 @@ class FakeControlClient implements ControlClient {
       candidateCount: 2,
       pressed: confirm,
       selectedIndex: 1,
+    };
+  }
+
+  async cyclePermissionMode(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<CyclePermissionModeResult> {
+    return {
+      availableModes: ["Ask for approval"],
+      bundleIdentifier,
+      currentMode: "Ask for approval",
+      selected: confirm,
+      targetMode: null,
     };
   }
 

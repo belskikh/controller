@@ -315,6 +315,9 @@ async function handleEngineOutput(
     case "newThread":
       await codex.newThread();
       break;
+    case "permissionMode.next":
+      await codex.cyclePermissionMode();
+      break;
     case "toggleLastTask":
       await codex.toggleLastTask();
       break;

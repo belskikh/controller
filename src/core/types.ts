@@ -6,6 +6,7 @@ export const ACTIONS = [
   "focusCodex",
   "interrupt",
   "newThread",
+  "permissionMode.next",
   "toggleLastTask",
   "switchPrevious",
   "switchNext",

@@ -82,9 +82,13 @@ Validated on the paired Bluetooth controller:
   operation.
 - `D-pad up` and `D-pad down` navigate visually up and down through Codex task
   history. This path remains separate from the L1 quick-toggle state.
-- `L1` alternates Codex's verified Previous Chat and Next Chat commands,
+- `L1` alternates Codex's verified Previous Chat and Next Chat menu actions,
   providing a two-task quick toggle. D-pad navigation resets the next L1 press
-  to Previous Chat.
+  to Previous Chat. Invoking the menu actions through Accessibility avoids
+  leaving Codex's numbered Command shortcut hints over the task activity icons.
+- `D-pad left` cycles through the enabled built-in permission modes exposed by
+  the live composer control. Selection and confirmation use only current
+  Accessibility elements and fail closed if the picker is unavailable.
 - Electron's reported `AXPress` success is not sufficient for these custom
   controls. Both the approval buttons and the popup menu item require a
   mouse click derived from the unique enabled element's live AX frame.
@@ -148,6 +152,7 @@ Validated on the paired Bluetooth controller:
 | Create | New chat | Passed |
 | Triangle | Clear input draft | Passed |
 | D-pad up/down | Next/previous task | Passed |
+| D-pad left | Cycle permission mode | Automated; hardware pending |
 | D-pad right | Dictate / transcribe and send | Passed |
 | Mute | Cancel dictation without sending | Passed |
 | Codex attention card | Double vibration pulse | Automated; hardware pending |

@@ -77,9 +77,21 @@ Codex controls:
 - `Create`: create a new Codex chat
 - `Triangle`: clear the complete draft from the Codex input field
 - `L1`: toggle back and forth between the last two opened Codex tasks
+- `D-pad left`: cycle through the enabled built-in permission modes
+  (`Ask for approval`, `Approve for me`, and `Full access`)
 - `D-pad right`: toggle between `Dictate` and `Transcribe and send`
 - `D-pad up` / `D-pad down`: visually up / down through Codex task history
 - DualSense `Mute`: `Stop dictation` without sending
+
+Task navigation invokes Codex's `Previous Chat` and `Next Chat` menu actions
+through Accessibility. It does not synthesize Command-key events, so Codex's
+numbered Command shortcut hints do not obscure task activity icons.
+
+Permission-mode switching resolves the live control below the composer, opens
+its picker with a mouse click derived from the current Accessibility frame,
+selects the next enabled built-in mode, and verifies that the selector changed.
+It fails closed while the picker is unavailable or if a mode needs additional
+confirmation.
 
 Voice state is resolved from the currently visible Codex controls on every
 press. It is not inferred from a potentially stale local toggle.
@@ -95,7 +107,6 @@ ignores `Running` cards, and reacts when a new card requires attention.
 Existing cards form a silent baseline after daemon or Codex restart, so startup
 does not replay old notifications. This feedback can occur while Codex is in
 the background; controller actions remain locked until Codex is frontmost.
-
 The daemon remains alive when the controller is powered off. It retries
 Bluetooth discovery with capped exponential backoff, accepts a new macOS HID
 path after reconnection, and keeps actions locked until Codex is frontmost.
