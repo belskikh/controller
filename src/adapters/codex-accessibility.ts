@@ -56,6 +56,24 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
     }
   }
 
+  async clearInput(): Promise<void> {
+    await this.assertFrontmost();
+    const result = await this.client.clearInput(
+      CODEX_BUNDLE_IDENTIFIER,
+      this.mutationsEnabled,
+    );
+    if (result.matched !== 1) {
+      throw new CodexAccessibilityError(
+        "Expected exactly one editable Codex input field.",
+      );
+    }
+    if (result.cleared !== this.mutationsEnabled) {
+      throw new CodexAccessibilityError(
+        "Unexpected clear-input result.",
+      );
+    }
+  }
+
   async decline(): Promise<void> {
     await this.press("button", this.labels.decline);
   }

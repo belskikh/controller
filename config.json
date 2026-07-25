@@ -27,6 +27,9 @@
     "square": {
       "press": "interrupt"
     },
+    "triangle": {
+      "press": "clearInput"
+    },
     "dpad.up": {
       "press": "switchPrevious"
     },

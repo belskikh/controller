@@ -9,6 +9,7 @@ describe("validateConfig", () => {
     bindings: {
       circle: { press: "focusCodex" },
       cross: { press: "accept" },
+      triangle: { press: "clearInput" },
     },
   };
 

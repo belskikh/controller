@@ -788,6 +788,163 @@ static int MatchControl(NSArray<NSString *> *arguments) {
     return 0;
 }
 
+static void CollectEditableTextAreas(
+    AXUIElementRef element,
+    NSUInteger depth,
+    NSUInteger maxDepth,
+    NSMutableArray *matches
+) {
+    if (depth > maxDepth || matches.count > 1) {
+        return;
+    }
+
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    id enabled = CopyAttribute(element, kAXEnabledAttribute);
+    Boolean valueIsSettable = false;
+    AXError settableResult = AXUIElementIsAttributeSettable(
+        element,
+        kAXValueAttribute,
+        &valueIsSettable
+    );
+    if ([role isEqualToString:(__bridge NSString *)kAXTextAreaRole]
+        && [enabled isKindOfClass:NSNumber.class]
+        && [enabled boolValue]
+        && settableResult == kAXErrorSuccess
+        && valueIsSettable) {
+        [matches addObject:(__bridge id)element];
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectEditableTextAreas(
+            (__bridge AXUIElementRef)child,
+            depth + 1,
+            maxDepth,
+            matches
+        );
+        if (matches.count > 1) {
+            return;
+        }
+    }
+}
+
+static int ClearInput(NSArray<NSString *> *arguments) {
+    if (!AXIsProcessTrusted()) {
+        return Fail(@"Accessibility permission is not granted to macos-control.");
+    }
+
+    NSString *bundleIdentifier = nil;
+    BOOL confirmed = NO;
+    for (NSUInteger index = 0; index < arguments.count;) {
+        NSString *argument = arguments[index];
+        if ([argument isEqualToString:@"--bundle-id"]) {
+            bundleIdentifier = ValueAfter(arguments, index);
+            if (bundleIdentifier == nil) {
+                return Fail(@"--bundle-id requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--confirm"]) {
+            confirmed = YES;
+            index += 1;
+        } else {
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Unknown clear-input argument: %@",
+                    argument]
+            );
+        }
+    }
+    if (bundleIdentifier.length == 0) {
+        return Fail(@"clear-input requires --bundle-id.");
+    }
+
+    NSArray<NSRunningApplication *> *applications =
+        [NSRunningApplication runningApplicationsWithBundleIdentifier:bundleIdentifier];
+    if (applications.count != 1) {
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one running %@ application; found %lu.",
+                bundleIdentifier,
+                (unsigned long)applications.count]
+        );
+    }
+
+    AXUIElementRef application = AXUIElementCreateApplication(
+        applications.firstObject.processIdentifier
+    );
+    id focusedWindow = CopyAttribute(application, kAXFocusedWindowAttribute);
+    if (focusedWindow == nil
+        || CFGetTypeID((__bridge CFTypeRef)focusedWindow)
+            != AXUIElementGetTypeID()) {
+        CFRelease(application);
+        return Fail(@"Could not resolve the focused application window.");
+    }
+
+    NSMutableArray *matches = [NSMutableArray array];
+    CollectEditableTextAreas(
+        (__bridge AXUIElementRef)focusedWindow,
+        0,
+        30,
+        matches
+    );
+    if (matches.count != 1) {
+        CFRelease(application);
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one enabled editable text area; found %lu.",
+                (unsigned long)matches.count]
+        );
+    }
+
+    AXUIElementRef input = (__bridge AXUIElementRef)matches.firstObject;
+    id currentValue = CopyAttribute(input, kAXValueAttribute);
+    BOOL wasEmpty = [currentValue isKindOfClass:NSString.class]
+        && [(NSString *)currentValue length] == 0;
+    BOOL cleared = NO;
+    if (confirmed) {
+        if (!ApplicationIsFrontmost(bundleIdentifier)) {
+            CFRelease(application);
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Refusing to clear input because %@ is not frontmost.",
+                    bundleIdentifier]
+            );
+        }
+        AXError result = AXUIElementSetAttributeValue(
+            input,
+            kAXValueAttribute,
+            (__bridge CFTypeRef)@""
+        );
+        if (result != kAXErrorSuccess) {
+            CFRelease(application);
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Could not clear the input field (AX error %d).",
+                    result]
+            );
+        }
+        cleared = YES;
+    }
+
+    CFRelease(application);
+    WriteJSON(
+        @{
+            @"bundleIdentifier": bundleIdentifier,
+            @"cleared": @(cleared),
+            @"matched": @1,
+            @"wasEmpty": @(wasEmpty),
+        },
+        stdout
+    );
+    return 0;
+}
+
 static BOOL FramesMatch(
     NSDictionary *firstPosition,
     NSDictionary *firstSize,
@@ -1468,6 +1625,7 @@ static void WriteUsage(void) {
         "  macos-control activate --bundle-id ID [--confirm]\n"
         "  macos-control watch-frontmost --bundle-id ID\n"
         "  macos-control previous-chat --bundle-id ID [--confirm]\n"
+        "  macos-control clear-input --bundle-id ID [--confirm]\n"
         "  macos-control match --bundle-id ID --role ROLE --label EXACT\n"
         "  macos-control press --bundle-id ID "
             "--role button|menu-item|pop-up-button "
@@ -1530,6 +1688,11 @@ int main(int argc, const char *argv[]) {
         }
         if ([command isEqualToString:@"previous-chat"]) {
             return PressPreviousChat(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"clear-input"]) {
+            return ClearInput(
                 [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
             );
         }

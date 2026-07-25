@@ -44,6 +44,13 @@ export interface SendKeyResult {
   sent: boolean;
 }
 
+export interface ClearInputResult {
+  bundleIdentifier: string;
+  cleared: boolean;
+  matched: number;
+  wasEmpty: boolean;
+}
+
 export interface PreviousChatResult {
   bundleIdentifier: string;
   candidateCount: number;
@@ -57,6 +64,10 @@ export interface ControlClient {
     bundleIdentifier: string,
     confirm: boolean,
   ): Promise<ActivateResult>;
+  clearInput(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ClearInputResult>;
   match(
     bundleIdentifier: string,
     role: ControlRole,
@@ -100,6 +111,18 @@ export class MacOSControlClient implements ControlClient {
   ): Promise<ActivateResult> {
     return this.run<ActivateResult>([
       "activate",
+      "--bundle-id",
+      bundleIdentifier,
+      ...(confirm ? ["--confirm"] : []),
+    ]);
+  }
+
+  async clearInput(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ClearInputResult> {
+    return this.run<ClearInputResult>([
+      "clear-input",
       "--bundle-id",
       bundleIdentifier,
       ...(confirm ? ["--confirm"] : []),

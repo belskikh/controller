@@ -12,6 +12,7 @@ const config: ControllerConfig = {
     "dpad.up": { press: "switchPrevious" },
     "dpad.right": { press: "voice.toggle" },
     circle: { press: "focusCodex" },
+    triangle: { press: "clearInput" },
   },
 };
 
@@ -74,6 +75,14 @@ describe("ControllerEngine", () => {
     const engine = new ControllerEngine({ ...config, startEnabled: true });
     expect(engine.handle({ control: "mute", phase: "press" }, 100)).toEqual([
       { type: "action", action: "voice.cancel" },
+    ]);
+  });
+
+  it("maps triangle to clearing the Codex input", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    expect(engine.handle({ control: "triangle", phase: "press" }, 100)).toEqual([
+      { type: "action", action: "clearInput" },
     ]);
   });
 });

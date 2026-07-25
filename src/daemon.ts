@@ -261,6 +261,9 @@ async function handleEngineOutput(
     case "allowSimilarCommands":
       await codex.allowSimilarCommands();
       break;
+    case "clearInput":
+      await codex.clearInput();
+      break;
     case "decline":
       await codex.decline();
       break;

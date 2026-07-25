@@ -6,6 +6,7 @@ import {
 import { CodexVoiceAccessibilityAdapter } from "./codex-voice-accessibility.js";
 import type {
   ActivateResult,
+  ClearInputResult,
   ControlClient,
   ControlMethod,
   ControlRole,
@@ -50,6 +51,18 @@ class FakeControlClient implements ControlClient {
       installed: true,
       launched: false,
       running: true,
+    };
+  }
+
+  async clearInput(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ClearInputResult> {
+    return {
+      bundleIdentifier,
+      cleared: confirm,
+      matched: 1,
+      wasEmpty: false,
     };
   }
 

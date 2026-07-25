@@ -1,6 +1,7 @@
 export interface AgentAdapter {
   accept(): Promise<void>;
   allowSimilarCommands(): Promise<void>;
+  clearInput(): Promise<void>;
   decline(): Promise<void>;
   focus(): Promise<void>;
   interrupt(): Promise<void>;

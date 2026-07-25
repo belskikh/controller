@@ -71,10 +71,11 @@ npm run daemon -- --enable-voice
 npm run daemon -- --enable-actions --enable-voice
 ```
 
-Native Codex voice controls:
+Codex controls:
 
 - `Circle`: bring Codex to the front and unlock its controls
 - `Create`: create a new Codex chat
+- `Triangle`: clear the complete draft from the Codex input field
 - `L1`: toggle back and forth between the last two opened Codex tasks
 - `D-pad right`: toggle between `Dictate` and `Transcribe and send`
 - `D-pad up` / `D-pad down`: visually up / down through Codex task history
@@ -82,6 +83,11 @@ Native Codex voice controls:
 
 Voice state is resolved from the currently visible Codex controls on every
 press. It is not inferred from a potentially stale local toggle.
+
+Input clearing resolves exactly one enabled, editable Accessibility text area
+in the focused Codex window and sets its value to empty. It fails without
+changing anything if Codex is not frontmost or the input cannot be resolved
+unambiguously.
 
 The daemon remains alive when the controller is powered off. It retries
 Bluetooth discovery with capped exponential backoff, accepts a new macOS HID

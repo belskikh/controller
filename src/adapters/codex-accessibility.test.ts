@@ -6,6 +6,7 @@ import {
 } from "./codex-accessibility.js";
 import type {
   ActivateResult,
+  ClearInputResult,
   ControlClient,
   ControlMethod,
   ControlRole,
@@ -27,6 +28,10 @@ class FakeControlClient implements ControlClient {
     confirm: boolean;
   }> = [];
   readonly previousChats: Array<{
+    bundleIdentifier: string;
+    confirm: boolean;
+  }> = [];
+  readonly clearInputs: Array<{
     bundleIdentifier: string;
     confirm: boolean;
   }> = [];
@@ -62,6 +67,19 @@ class FakeControlClient implements ControlClient {
       installed: true,
       launched: false,
       running: true,
+    };
+  }
+
+  async clearInput(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ClearInputResult> {
+    this.clearInputs.push({ bundleIdentifier, confirm });
+    return {
+      bundleIdentifier,
+      cleared: confirm,
+      matched: 1,
+      wasEmpty: false,
     };
   }
 
@@ -150,6 +168,21 @@ describe("CodexAccessibilityAdapter", () => {
     expect(client.calls[0]?.confirm).toBe(true);
     expect(client.calls[0]?.method).toBe("mouse");
     expect(client.calls[0]?.label).toBe("Allow once");
+  });
+
+  it("clears the unique Codex input only when mutations are enabled", async () => {
+    const dryRunClient = new FakeControlClient();
+    const liveClient = new FakeControlClient();
+
+    await new CodexAccessibilityAdapter(dryRunClient).clearInput();
+    await new CodexAccessibilityAdapter(liveClient, true).clearInput();
+
+    expect(dryRunClient.clearInputs).toEqual([
+      { bundleIdentifier: CODEX_BUNDLE_IDENTIFIER, confirm: false },
+    ]);
+    expect(liveClient.clearInputs).toEqual([
+      { bundleIdentifier: CODEX_BUNDLE_IDENTIFIER, confirm: true },
+    ]);
   });
 
   it("selects the confirmed similar-command option", async () => {

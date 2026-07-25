@@ -1,6 +1,7 @@
 export const ACTIONS = [
   "accept",
   "allowSimilarCommands",
+  "clearInput",
   "decline",
   "focusCodex",
   "interrupt",

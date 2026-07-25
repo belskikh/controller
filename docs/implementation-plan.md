@@ -89,6 +89,12 @@ Validated on the paired Bluetooth controller:
   controls. Both the approval buttons and the popup menu item require a
   mouse click derived from the unique enabled element's live AX frame.
 
+Added after the validated v0 baseline: `Triangle` resolves the single editable
+text area in the focused Codex window and clears its value. The action fails
+closed when the field is missing or ambiguous. The full Bluetooth path was
+validated on the paired controller: pressing `Triangle` cleared a populated
+Codex input draft.
+
 ### M4 — native Codex voice
 
 1. Use Codex's visible `Dictate`, `Transcribe and send`, and `Stop dictation`
@@ -138,6 +144,7 @@ Validated on the paired Bluetooth controller:
 | L1 | Toggle between last two opened tasks | Passed |
 | Circle | Activate Codex globally | Passed |
 | Create | New chat | Passed |
+| Triangle | Clear input draft | Passed |
 | D-pad up/down | Next/previous task | Passed |
 | D-pad right | Dictate / transcribe and send | Passed |
 | Mute | Cancel dictation without sending | Passed |
