@@ -11,6 +11,7 @@
     "predaemon": "npm run build --silent && make -C helpers/macos-control",
     "daemon": "node --enable-source-maps dist/daemon.js",
     "package:launchd": "npm run build --silent && node dist/launchd/generate.js",
+    "daemon:background": "npm run package:launchd --silent && node dist/launchd/manage.js",
     "presimulate": "npm run build --silent",
     "simulate": "node --enable-source-maps dist/simulator.js",
     "prespike:bt": "npm run build --silent",

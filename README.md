@@ -121,3 +121,22 @@ plutil -lint dist/com.codex.dualsense-control.plist
 Generation does not install or load the agent. The plist uses stable absolute
 runtime paths, enables both Codex action boundaries, and writes logs under
 `~/Library/Logs/DualSenseCodex`.
+
+### Background agent
+
+To install and start the daemon as a per-user background `launchd` agent:
+
+```sh
+npm run daemon:background -- start
+```
+
+The command regenerates the plist, copies it to
+`~/Library/LaunchAgents/com.codex.dualsense-control.plist`, then bootstraps it
+in the current user's GUI session. It starts with both `--enable-actions` and
+`--enable-voice`, just as the generated plist specifies. Inspect or stop it
+without restarting the daemon:
+
+```sh
+npm run daemon:background -- status
+npm run daemon:background -- stop
+```
