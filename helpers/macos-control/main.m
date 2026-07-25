@@ -1327,6 +1327,123 @@ static int WatchFrontmost(NSArray<NSString *> *arguments) {
     return 0;
 }
 
+static void CountAttentionNotifications(
+    AXUIElementRef element,
+    NSUInteger depth,
+    NSUInteger maxDepth,
+    NSUInteger *count
+) {
+    if (depth > maxDepth || *count >= 500) {
+        return;
+    }
+
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    NSString *description = StringAttribute(element, kAXDescriptionAttribute);
+    id enabled = CopyAttribute(element, kAXEnabledAttribute);
+    if ([role isEqualToString:(__bridge NSString *)kAXButtonRole]
+        && [enabled isKindOfClass:NSNumber.class]
+        && [enabled boolValue]
+        && [description containsString:@"Open notification"]
+        && ![description containsString:@". Running."]) {
+        *count += 1;
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CountAttentionNotifications(
+            (__bridge AXUIElementRef)child,
+            depth + 1,
+            maxDepth,
+            count
+        );
+        if (*count >= 500) {
+            return;
+        }
+    }
+}
+
+static NSUInteger AttentionNotificationCount(pid_t processIdentifier) {
+    AXUIElementRef application = AXUIElementCreateApplication(processIdentifier);
+    id rawWindows = CopyAttribute(application, kAXWindowsAttribute);
+    NSArray *windows = [rawWindows isKindOfClass:NSArray.class]
+        ? rawWindows
+        : @[];
+    NSUInteger count = 0;
+    for (id window in windows) {
+        if (CFGetTypeID((__bridge CFTypeRef)window) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CountAttentionNotifications(
+            (__bridge AXUIElementRef)window,
+            0,
+            30,
+            &count
+        );
+    }
+    CFRelease(application);
+    return count;
+}
+
+static void WriteAttentionState(
+    NSNumber *processIdentifier,
+    NSUInteger attentionCount
+) {
+    WriteJSON(
+        @{
+            @"attentionCount": @(attentionCount),
+            @"pid": processIdentifier ?: NSNull.null,
+        },
+        stdout
+    );
+    fflush(stdout);
+}
+
+static int WatchAttention(NSArray<NSString *> *arguments) {
+    if (!AXIsProcessTrusted()) {
+        return Fail(@"Accessibility permission is not granted to macos-control.");
+    }
+    if (arguments.count != 2
+        || ![arguments[0] isEqualToString:@"--bundle-id"]
+        || arguments[1].length == 0) {
+        return Fail(@"watch-attention requires exactly --bundle-id ID.");
+    }
+
+    NSString *bundleIdentifier = arguments[1];
+    NSNumber *lastProcessIdentifier = nil;
+    NSUInteger lastCount = NSNotFound;
+    while (YES) {
+        NSArray<NSRunningApplication *> *applications =
+            [NSRunningApplication
+                runningApplicationsWithBundleIdentifier:bundleIdentifier];
+        NSNumber *processIdentifier = nil;
+        NSUInteger count = 0;
+        if (applications.count == 1) {
+            pid_t pid = applications.firstObject.processIdentifier;
+            processIdentifier = @(pid);
+            count = AttentionNotificationCount(pid);
+        }
+        BOOL sameProcess = (
+            processIdentifier == nil && lastProcessIdentifier == nil
+        ) || (
+            processIdentifier != nil
+            && lastProcessIdentifier != nil
+            && [processIdentifier isEqualToNumber:lastProcessIdentifier]
+        );
+        if (!sameProcess || count != lastCount) {
+            WriteAttentionState(processIdentifier, count);
+            lastProcessIdentifier = processIdentifier;
+            lastCount = count;
+        }
+        usleep(250000);
+    }
+}
+
 static int PressControl(NSArray<NSString *> *arguments) {
     if (!AXIsProcessTrusted()) {
         return Fail(@"Accessibility permission is not granted to macos-control.");
@@ -1624,6 +1741,7 @@ static void WriteUsage(void) {
         "  macos-control outline --bundle-id ID\n"
         "  macos-control activate --bundle-id ID [--confirm]\n"
         "  macos-control watch-frontmost --bundle-id ID\n"
+        "  macos-control watch-attention --bundle-id ID\n"
         "  macos-control previous-chat --bundle-id ID [--confirm]\n"
         "  macos-control clear-input --bundle-id ID [--confirm]\n"
         "  macos-control match --bundle-id ID --role ROLE --label EXACT\n"
@@ -1683,6 +1801,11 @@ int main(int argc, const char *argv[]) {
         }
         if ([command isEqualToString:@"watch-frontmost"]) {
             return WatchFrontmost(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"watch-attention"]) {
+            return WatchAttention(
                 [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
             );
         }

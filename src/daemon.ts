@@ -24,6 +24,10 @@ import { CodexVoiceAccessibilityAdapter } from "./adapters/codex-voice-accessibi
 import { MacOSControlClient } from "./macos/control-client.js";
 import { MacOSFrontmostMonitor } from "./macos/frontmost-monitor.js";
 import {
+  AttentionTracker,
+  MacOSAttentionMonitor,
+} from "./macos/attention-monitor.js";
+import {
   DaemonOptionsError,
   parseDaemonOptions,
 } from "./daemon-options.js";
@@ -130,6 +134,11 @@ async function runConnectedSession(
     options.macOSHelperPath,
     CODEX_BUNDLE_IDENTIFIER,
   );
+  const attentionMonitor = new MacOSAttentionMonitor(
+    options.macOSHelperPath,
+    CODEX_BUNDLE_IDENTIFIER,
+  );
+  const attentionTracker = new AttentionTracker();
 
   const applyAvailability = async (codexFrontmost: boolean): Promise<void> => {
     for (const output of engine.synchronizeEnabled(codexFrontmost)) {
@@ -194,6 +203,26 @@ async function runConnectedSession(
       });
   };
 
+  const enqueueAttention = (
+    newAttentionCount: number,
+    attentionCount: number,
+  ): void => {
+    if (!acceptingInput) {
+      return;
+    }
+    work = work
+      .then(async () => {
+        if (!acceptingInput) {
+          return;
+        }
+        emit("attention", { attentionCount, newAttentionCount });
+        await feedback.showAttention();
+      })
+      .catch((error: unknown) => {
+        emitError(error);
+      });
+  };
+
   try {
     await feedback.initialize();
     await synchronizeAvailability();
@@ -203,6 +232,15 @@ async function runConnectedSession(
         emitError(error);
         enqueueAvailability(false);
       },
+    );
+    attentionMonitor.start(
+      (state) => {
+        const newAttentionCount = attentionTracker.update(state);
+        if (newAttentionCount > 0) {
+          enqueueAttention(newAttentionCount, state.attentionCount);
+        }
+      },
+      emitError,
     );
     unsubscribeInput = subscribeButtonEvents(connection.hid, enqueueEvent);
     emit("ready", {
@@ -216,6 +254,7 @@ async function runConnectedSession(
   } finally {
     acceptingInput = false;
     frontmostMonitor.stop();
+    attentionMonitor.stop();
     unsubscribeInput();
     await work.catch(() => {});
     engine.disable();

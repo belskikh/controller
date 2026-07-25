@@ -67,4 +67,26 @@ describe("DualSenseFeedbackPolicy", () => {
       },
     ]);
   });
+
+  it("uses a double pulse for attention and restores the disabled state", async () => {
+    const output = new FakeOutput();
+    const wait = vi.fn(async () => {});
+    const feedback = new DualSenseFeedbackPolicy(output, wait);
+
+    await feedback.showAttention();
+
+    expect(wait.mock.calls).toEqual([[160], [100], [160]]);
+    expect(output.calls).toEqual([
+      {
+        rumble: { left: 0.22, right: 0.35 },
+      },
+      {
+        rumble: { left: 0, right: 0 },
+      },
+      {
+        rumble: { left: 0.22, right: 0.35 },
+      },
+      "reset",
+    ]);
+  });
 });

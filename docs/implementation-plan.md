@@ -117,7 +117,9 @@ Validated on the paired Bluetooth controller:
 2. Rate-limit and coalesce Bluetooth output reports.
 3. Reset outputs on disable, disconnect, adapter error, and shutdown.
 4. Add reconnect backoff, a watchdog, structured logs, and a launchd plist.
-5. Run end-to-end tests for every action before enabling login startup.
+5. Watch Codex's Accessibility activity cards and emit a double vibration
+   pulse when a new non-running card requires attention.
+6. Run end-to-end tests for every action before enabling login startup.
 
 Validated on the paired Bluetooth controller:
 
@@ -148,6 +150,7 @@ Validated on the paired Bluetooth controller:
 | D-pad up/down | Next/previous task | Passed |
 | D-pad right | Dictate / transcribe and send | Passed |
 | Mute | Cancel dictation without sending | Passed |
+| Codex attention card | Double vibration pulse | Automated; hardware pending |
 | Power off/on | Reconnect with disabled state | Passed |
 
 ### Optional M6 — owned app-server mode

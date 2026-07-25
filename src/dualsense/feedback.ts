@@ -36,6 +36,22 @@ export class DualSenseFeedbackPolicy {
     await this.render();
   }
 
+  async showAttention(): Promise<void> {
+    const pulse = async (): Promise<void> => {
+      await this.output.update({
+        rumble: { left: 0.22, right: 0.35 },
+      });
+      await this.wait(160);
+    };
+    await pulse();
+    await this.output.update({
+      rumble: { left: 0, right: 0 },
+    });
+    await this.wait(100);
+    await pulse();
+    await this.render();
+  }
+
   async shutdown(): Promise<void> {
     this.enabled = false;
     await this.output.reset();

@@ -89,6 +89,13 @@ in the focused Codex window and sets its value to empty. It fails without
 changing anything if Codex is not frontmost or the input cannot be resolved
 unambiguously.
 
+Codex attention notifications produce two short DualSense vibration pulses.
+The daemon watches the application's live Accessibility activity cards,
+ignores `Running` cards, and reacts when a new card requires attention.
+Existing cards form a silent baseline after daemon or Codex restart, so startup
+does not replay old notifications. This feedback can occur while Codex is in
+the background; controller actions remain locked until Codex is frontmost.
+
 The daemon remains alive when the controller is powered off. It retries
 Bluetooth discovery with capped exponential backoff, accepts a new macOS HID
 path after reconnection, and keeps actions locked until Codex is frontmost.
