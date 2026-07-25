@@ -242,3 +242,7 @@ npm run daemon:background -- stop
 
 For detailed hardware gates and the latest acceptance matrix, see the
 [`validated implementation plan`](docs/implementation-plan.md).
+
+## Acknowledgments
+
+Initial concept co-created with [@glebsinev](https://github.com/glebsinev).
