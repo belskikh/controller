@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "startEnabled": false,
+  "debounceMs": 80,
+  "bindings": {
+    "right.trigger.button": {
+      "press": "accept"
+    },
+    "right.bumper": {
+      "press": "allowSimilarCommands"
+    },
+    "left.trigger.button": {
+      "press": "decline"
+    },
+    "left.bumper": {
+      "press": "toggleLastTask"
+    },
+    "circle": {
+      "press": "focusCodex"
+    },
+    "create": {
+      "press": "newThread"
+    },
+    "mute": {
+      "press": "voice.cancel"
+    },
+    "square": {
+      "press": "interrupt"
+    },
+    "dpad.up": {
+      "press": "switchPrevious"
+    },
+    "dpad.down": {
+      "press": "switchNext"
+    },
+    "dpad.right": {
+      "press": "voice.toggle"
+    }
+  }
+}

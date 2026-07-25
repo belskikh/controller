@@ -1,0 +1,28 @@
+{
+  "name": "dualsense-agent-control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bluetooth DualSense control surface for Codex Desktop on macOS.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "predaemon": "npm run build --silent && make -C helpers/macos-control",
+    "daemon": "node --enable-source-maps dist/daemon.js",
+    "package:launchd": "npm run build --silent && node dist/launchd/generate.js",
+    "presimulate": "npm run build --silent",
+    "simulate": "node --enable-source-maps dist/simulator.js",
+    "prespike:bt": "npm run build --silent",
+    "spike:bt": "node --enable-source-maps dist/spikes/dualsense-bluetooth.js"
+  },
+  "dependencies": {
+    "dualsense-ts": "6.15.38",
+    "node-hid": "3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.2",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
