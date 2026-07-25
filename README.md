@@ -228,18 +228,6 @@ npm run daemon:background -- status
 npm run daemon:background -- stop
 ```
 
-## Current boundaries
-
-- Codex Desktop and macOS Accessibility are the only application-control path.
-- Approval buttons exist only while Codex is asking for approval; pressing an
-  approval binding at any other time safely fails.
-- UI control labels and roles must remain compatible with the installed Codex
-  Desktop build.
-- Cursor, Handy, generic pointer control, USB fallback, and ownership of a
-  separate `codex app-server` are outside this project's scope.
-- Generated build output, the native helper binary, coverage, logs,
-  `node_modules/`, and `dist/` remain untracked.
-
 For detailed hardware gates and the latest acceptance matrix, see the
 [`validated implementation plan`](docs/implementation-plan.md).
 
