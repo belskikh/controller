@@ -48,38 +48,6 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 Unmapped controls are inert. D-pad navigation resets the next `L1` press to
 the previous task, keeping the two-task toggle predictable.
 
-## How it works
-
-```mermaid
-flowchart LR
-    controller["Bluetooth controller"] --> hid["HID input normalization"]
-    hid --> engine["Safety engine<br/>lock + debounce + routing"]
-    foreground["Frontmost app monitor"] --> engine
-    engine --> adapter["Application Accessibility adapters"]
-    adapter --> helper["Native macOS helper"]
-    helper --> app["Current AI application"]
-    app --> attention["Attention monitor"]
-    attention --> feedback["Feedback policy"]
-    engine --> feedback
-    feedback --> controller
-```
-
-1. `node-hid` and `dualsense-ts` open the currently supported wireless
-   controller and normalize HID
-   reports into button press/release events.
-2. The controller engine debounces duplicate reports and checks its lock before
-   routing an action.
-3. A native helper continuously reports whether the target application is frontmost. The engine
-   locks on startup, disconnect, foreground-monitor failure, and shutdown.
-4. Narrow Accessibility adapters resolve one unique, enabled application element by
-   its current role and label. Ambiguous or missing targets fail without
-   clicking anything.
-5. Some Electron controls report a successful `AXPress` without acting. For
-   those controls, the helper derives a mouse click from the matched element's
-   current AX frame. There are no hard-coded coordinates.
-6. State and attention events flow back to the controller as lightbar,
-   player-LED, and rumble feedback.
-
 ## Requirements for the current integration
 
 - macOS with the currently supported AI application installed
