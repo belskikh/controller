@@ -1376,7 +1376,11 @@ static NSString *ModelPowerSpeedModeFromSnapshot(
     return nil;
 }
 
-static BOOL PostKeyCode(CGKeyCode keyCode, CGEventFlags flags) {
+static BOOL PostKeyCodeWithCharacters(
+    CGKeyCode keyCode,
+    CGEventFlags flags,
+    NSString *characters
+) {
     CGEventRef down = CGEventCreateKeyboardEvent(
         nil,
         keyCode,
@@ -1394,12 +1398,29 @@ static BOOL PostKeyCode(CGKeyCode keyCode, CGEventFlags flags) {
     }
     CGEventSetFlags(down, flags);
     CGEventSetFlags(up, flags);
+    if (characters.length > 0) {
+        NSUInteger length = characters.length;
+        UniChar *buffer = calloc(length, sizeof(UniChar));
+        if (buffer == NULL) {
+            CFRelease(down);
+            CFRelease(up);
+            return NO;
+        }
+        [characters getCharacters:buffer range:NSMakeRange(0, length)];
+        CGEventKeyboardSetUnicodeString(down, length, buffer);
+        CGEventKeyboardSetUnicodeString(up, length, buffer);
+        free(buffer);
+    }
     CGEventPost(kCGHIDEventTap, down);
     [NSThread sleepForTimeInterval:0.02];
     CGEventPost(kCGHIDEventTap, up);
     CFRelease(down);
     CFRelease(up);
     return YES;
+}
+
+static BOOL PostKeyCode(CGKeyCode keyCode, CGEventFlags flags) {
+    return PostKeyCodeWithCharacters(keyCode, flags, nil);
 }
 
 static BOOL PostKeyName(NSString *keyName) {
@@ -1411,9 +1432,10 @@ static BOOL PostKeyName(NSString *keyName) {
 static BOOL PostModelPowerShortcut(void) {
     NSNumber *keyCode = KeyCodes()[@"m"];
     return keyCode != nil
-        && PostKeyCode(
+        && PostKeyCodeWithCharacters(
             (CGKeyCode)keyCode.unsignedShortValue,
-            kCGEventFlagMaskControl | kCGEventFlagMaskShift
+            kCGEventFlagMaskControl | kCGEventFlagMaskShift,
+            @"M"
         );
 }
 

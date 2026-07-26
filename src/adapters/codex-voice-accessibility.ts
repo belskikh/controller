@@ -46,7 +46,18 @@ export class CodexVoiceAccessibilityAdapter {
   }
 
   async cancel(): Promise<void> {
-    await this.assertReady();
+    const status = await this.client.status();
+    if (!Boolean(status.accessibilityTrusted)) {
+      throw new CodexAccessibilityError(
+        "macOS Accessibility permission is not granted.",
+      );
+    }
+    if (
+      status.frontmostApplication.bundleIdentifier
+      !== CODEX_BUNDLE_IDENTIFIER
+    ) {
+      return;
+    }
     const result = await this.client.match(
       CODEX_BUNDLE_IDENTIFIER,
       "button",

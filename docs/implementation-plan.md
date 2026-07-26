@@ -122,7 +122,8 @@ Validated on the paired Bluetooth controller:
 
 1. Convert adapter state to a single feedback state machine.
 2. Rate-limit and coalesce Bluetooth output reports.
-3. Reset outputs on disable, disconnect, adapter error, and shutdown.
+3. Clear visual indicators without rumble on disable, and reset outputs on
+   disconnect, adapter error, and shutdown.
 4. Add reconnect backoff, a watchdog, structured logs, and a launchd plist.
 5. Watch Codex's Accessibility activity cards and emit a double vibration
    pulse when a new non-running card requires attention.

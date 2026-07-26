@@ -259,6 +259,24 @@ describe("CodexVoiceAccessibilityAdapter", () => {
     ]);
   });
 
+  it("silently skips focus-loss cleanup after Codex is no longer frontmost", async () => {
+    const client = new FakeControlClient();
+    client.matches.set("Stop dictation", 1);
+    client.statusValue = {
+      accessibilityTrusted: true,
+      frontmostApplication: {
+        bundleIdentifier: "org.mozilla.firefox",
+        name: "Firefox",
+        pid: 456,
+      },
+    };
+    const voice = new CodexVoiceAccessibilityAdapter(client, true);
+
+    await voice.cancel();
+
+    expect(client.presses).toHaveLength(0);
+  });
+
   it("fails closed for an ambiguous UI state", async () => {
     const client = new FakeControlClient();
     client.matches.set("Transcribe and send", 1);

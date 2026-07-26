@@ -152,6 +152,7 @@ requires `--confirm-output`.
 
 - A blue lightbar and center player LED indicate that application controls are
   unlocked.
+- Switching away from Codex clears those indicators without engaging rumble.
 - Errors use a short error feedback sequence.
 - A new non-running application activity card that requires attention produces two
   short vibration pulses. Existing cards form a silent baseline after a daemon

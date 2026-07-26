@@ -23,7 +23,7 @@ export class DualSenseFeedbackPolicy {
 
   async setEnabled(enabled: boolean): Promise<void> {
     this.enabled = enabled;
-    await this.render();
+    await this.render(false);
   }
 
   async showError(): Promise<void> {
@@ -33,7 +33,7 @@ export class DualSenseFeedbackPolicy {
       rumble: { left: 20, right: 20 },
     });
     await this.wait(350);
-    await this.render();
+    await this.render(true);
   }
 
   async showAttention(): Promise<void> {
@@ -49,7 +49,7 @@ export class DualSenseFeedbackPolicy {
     });
     await this.wait(100);
     await pulse();
-    await this.render();
+    await this.render(true);
   }
 
   async shutdown(): Promise<void> {
@@ -57,15 +57,15 @@ export class DualSenseFeedbackPolicy {
     await this.output.reset();
   }
 
-  private async render(): Promise<void> {
-    if (!this.enabled) {
-      await this.output.reset();
-      return;
-    }
+  private async render(stopRumble: boolean): Promise<void> {
     await this.output.update({
-      color: { r: 0, g: 25, b: 130 },
-      playerLeds: 0b0_0100,
-      rumble: { left: 0, right: 0 },
+      color: this.enabled
+        ? { r: 0, g: 25, b: 130 }
+        : { r: 0, g: 0, b: 0 },
+      playerLeds: this.enabled ? 0b0_0100 : 0,
+      ...(stopRumble
+        ? { rumble: { left: 0, right: 0 } }
+        : {}),
     });
   }
 }

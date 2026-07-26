@@ -24,7 +24,7 @@ class FakeOutput implements DualSenseFeedbackOutput {
 }
 
 describe("DualSenseFeedbackPolicy", () => {
-  it("renders disabled and enabled states deterministically", async () => {
+  it("changes availability indicators without touching rumble", async () => {
     const output = new FakeOutput();
     const feedback = new DualSenseFeedbackPolicy(output, async () => {});
 
@@ -38,9 +38,11 @@ describe("DualSenseFeedbackPolicy", () => {
       {
         color: { r: 0, g: 25, b: 130 },
         playerLeds: 0b0_0100,
-        rumble: { left: 0, right: 0 },
       },
-      "reset",
+      {
+        color: { r: 0, g: 0, b: 0 },
+        playerLeds: 0,
+      },
     ]);
   });
 
@@ -86,7 +88,11 @@ describe("DualSenseFeedbackPolicy", () => {
       {
         rumble: { left: 0.22, right: 0.35 },
       },
-      "reset",
+      {
+        color: { r: 0, g: 0, b: 0 },
+        playerLeds: 0,
+        rumble: { left: 0, right: 0 },
+      },
     ]);
   });
 });

@@ -56,6 +56,19 @@ describe("buildBluetoothLedReport", () => {
     expect(report[5]).toBe(64);
     expect(report[6]).toBe(128);
   });
+
+  it("does not engage compatible rumble for visual-only updates", () => {
+    const report = buildBluetoothLedReport({
+      layout: "sony",
+      sequence: 3,
+      color: { r: 0, g: 0, b: 0 },
+      playerLeds: 0,
+    });
+
+    expect(report[3]).toBe(0);
+    expect(report[5]).toBe(0);
+    expect(report[6]).toBe(0);
+  });
 });
 
 function readCRC(report: Uint8Array): number {
