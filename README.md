@@ -67,32 +67,33 @@ Install dependencies, validate the project, then start the daemon:
 npm install
 npm run check
 npm test
-npm run daemon -- --enable-actions --enable-voice
+npm run daemon
 ```
 
 The daemon command builds both the TypeScript project and the native helper
 before starting. Run it from a macOS process that already has Accessibility
 permission.
 
-### Mutation flags
+### Disable flags
 
-Running without flags keeps the external integrations in dry-run mode:
+Running without flags starts the complete controller with actions and native
+dictation enabled:
 
 ```sh
 npm run daemon
 ```
 
-Enable the two mutation boundaries independently:
+Disable either capability when running diagnostics:
 
 ```sh
-# Approvals, navigation, task creation, stopping, draft clearing, and modes
-npm run daemon -- --enable-actions
+# Keep voice, but disable approvals, navigation, task creation, and modes
+npm run daemon -- --disable-actions
 
-# Native dictation controls
-npm run daemon -- --enable-voice
+# Keep actions, but disable native dictation controls
+npm run daemon -- --disable-voice
 
-# Complete controller
-npm run daemon -- --enable-actions --enable-voice
+# Fully read-only diagnostics
+npm run daemon -- --disable-actions --disable-voice
 ```
 
 When the target application loses focus, the daemon locks immediately and cancels active
@@ -194,9 +195,9 @@ npm run daemon:background -- start
 ```
 
 The command regenerates the plist, copies it to
-`~/Library/LaunchAgents/com.codex.dualsense-control.plist`, then bootstraps it
-in the current user's GUI session with both `--enable-actions` and
-`--enable-voice`. Inspect or stop it without restarting the daemon:
+`~/Library/LaunchAgents/com.codex.dualsense-control.plist`, then bootstraps the
+enabled-by-default daemon in the current user's GUI session. Inspect or stop it
+without restarting the daemon:
 
 ```sh
 npm run daemon:background -- status

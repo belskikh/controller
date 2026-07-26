@@ -383,20 +383,27 @@ static BOOL ClickElementCenter(AXUIElementRef element) {
         [position[@"x"] doubleValue] + width / 2.0,
         [position[@"y"] doubleValue] + height / 2.0
     );
+    CGEventRef move = CGEventCreateMouseEvent(
+        nil, kCGEventMouseMoved, center, kCGMouseButtonLeft
+    );
     CGEventRef down = CGEventCreateMouseEvent(
         nil, kCGEventLeftMouseDown, center, kCGMouseButtonLeft
     );
     CGEventRef up = CGEventCreateMouseEvent(
         nil, kCGEventLeftMouseUp, center, kCGMouseButtonLeft
     );
-    if (down == nil || up == nil) {
+    if (move == nil || down == nil || up == nil) {
+        if (move != nil) CFRelease(move);
         if (down != nil) CFRelease(down);
         if (up != nil) CFRelease(up);
         return NO;
     }
+    CGEventPost(kCGHIDEventTap, move);
+    [NSThread sleepForTimeInterval:0.02];
     CGEventPost(kCGHIDEventTap, down);
     [NSThread sleepForTimeInterval:0.02];
     CGEventPost(kCGHIDEventTap, up);
+    CFRelease(move);
     CFRelease(down);
     CFRelease(up);
     return YES;
@@ -1010,7 +1017,7 @@ static void CollectRepeatedRowButtons(
     NSUInteger depth,
     NSMutableArray<NSDictionary *> *candidates
 ) {
-    if (depth > 30 || candidates.count >= 100) {
+    if (depth > 40 || candidates.count >= 100) {
         return;
     }
     NSString *role = StringAttribute(element, kAXRoleAttribute);
@@ -1914,6 +1921,14 @@ static NSArray<NSString *> *PermissionModeLabels(void) {
     return @[@"Ask for approval", @"Approve for me", @"Full access"];
 }
 
+static NSString *PermissionModeLabel(AXUIElementRef element) {
+    NSString *label = ControlLabel(element);
+    if (label.length > 0) {
+        return label;
+    }
+    return StringAttribute(element, kAXValueAttribute);
+}
+
 static void CollectPermissionModeCandidates(
     AXUIElementRef element,
     NSUInteger depth,
@@ -1924,21 +1939,20 @@ static void CollectPermissionModeCandidates(
     }
 
     NSString *role = StringAttribute(element, kAXRoleAttribute);
-    NSString *label = ControlLabel(element);
+    NSString *label = PermissionModeLabel(element);
     id enabled = CopyAttribute(element, kAXEnabledAttribute);
     NSDictionary *position = PointAttribute(element, kAXPositionAttribute);
     NSDictionary *size = SizeAttribute(element, kAXSizeAttribute);
     if (role != nil
-        && IsInteractiveRole(role)
         && [PermissionModeLabels() containsObject:label ?: @""]
-        && [enabled isKindOfClass:NSNumber.class]
-        && [enabled boolValue]
+        && (![enabled isKindOfClass:NSNumber.class] || [enabled boolValue])
         && position != nil
         && size != nil) {
         [candidates addObject:@{
             @"element": (__bridge id)element,
             @"label": label,
             @"position": position,
+            @"role": role,
             @"size": size,
         }];
     }
@@ -1966,57 +1980,96 @@ static NSArray<NSDictionary *> *PermissionModeCandidates(
     AXUIElementRef application
 ) {
     NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
+    // Electron exposes the closed selector below a window, while its open
+    // menu items can be attached directly to the application AX root.
     id rawWindows = CopyAttribute(application, kAXWindowsAttribute);
-    if (![rawWindows isKindOfClass:NSArray.class]) {
-        return candidates;
-    }
-    for (id window in (NSArray *)rawWindows) {
-        if (CFGetTypeID((__bridge CFTypeRef)window)
-            != AXUIElementGetTypeID()) {
-            continue;
+    if ([rawWindows isKindOfClass:NSArray.class]) {
+        for (id window in (NSArray *)rawWindows) {
+            if (CFGetTypeID((__bridge CFTypeRef)window)
+                == AXUIElementGetTypeID()) {
+                CollectPermissionModeCandidates(
+                    (__bridge AXUIElementRef)window,
+                    0,
+                    candidates
+                );
+            }
         }
-        CollectPermissionModeCandidates(
-            (__bridge AXUIElementRef)window,
-            0,
-            candidates
-        );
     }
+    CollectPermissionModeCandidates(application, 0, candidates);
     return candidates;
 }
 
-static NSDictionary *PermissionModeOption(
+static NSArray<NSDictionary *> *PermissionModeSelectors(
+    AXUIElementRef application
+) {
+    NSMutableArray<NSDictionary *> *selectors = [NSMutableArray array];
+    for (
+        NSDictionary *candidate
+        in PermissionModeCandidates(application)
+    ) {
+        if (IsInteractiveRole(candidate[@"role"])) {
+            BOOL duplicate = NO;
+            for (NSDictionary *selector in selectors) {
+                if ([selector[@"label"] isEqualToString:candidate[@"label"]]
+                    && FramesMatch(
+                        selector[@"position"],
+                        selector[@"size"],
+                        candidate[@"position"],
+                        candidate[@"size"]
+                    )) {
+                    duplicate = YES;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                [selectors addObject:candidate];
+            }
+        }
+    }
+    return selectors;
+}
+
+static NSDictionary *NearestPermissionModeOption(
     NSArray<NSDictionary *> *candidates,
     NSString *label,
     NSDictionary *selector
 ) {
+    NSDictionary *selectorPosition = selector[@"position"];
+    NSDictionary *selectorSize = selector[@"size"];
+    double selectorWidth = [selectorSize[@"width"] doubleValue];
+    double selectorHeight = [selectorSize[@"height"] doubleValue];
+    double selectorX =
+        [selectorPosition[@"x"] doubleValue] + selectorWidth / 2.0;
+    double selectorY =
+        [selectorPosition[@"y"] doubleValue] + selectorHeight / 2.0;
+    double radius = MAX(selectorWidth, selectorHeight) * 4.0;
+    double nearestDistanceSquared = radius * radius;
+    NSDictionary *nearest = nil;
     for (NSDictionary *candidate in candidates) {
-        if (![candidate[@"label"] isEqualToString:label]) {
+        if (![candidate[@"label"] isEqualToString:label]
+            || FramesMatch(
+                candidate[@"position"],
+                candidate[@"size"],
+                selectorPosition,
+                selectorSize
+            )) {
             continue;
         }
-        if (!FramesMatch(
-            candidate[@"position"],
-            candidate[@"size"],
-            selector[@"position"],
-            selector[@"size"]
-        )) {
-            return candidate;
+        NSDictionary *position = candidate[@"position"];
+        NSDictionary *size = candidate[@"size"];
+        double x = [position[@"x"] doubleValue]
+            + [size[@"width"] doubleValue] / 2.0;
+        double y = [position[@"y"] doubleValue]
+            + [size[@"height"] doubleValue] / 2.0;
+        double dx = x - selectorX;
+        double dy = y - selectorY;
+        double distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < nearestDistanceSquared) {
+            nearestDistanceSquared = distanceSquared;
+            nearest = candidate;
         }
     }
-    return nil;
-}
-
-static BOOL CandidateHasSelectorOrigin(
-    NSDictionary *candidate,
-    NSDictionary *selector
-) {
-    NSDictionary *candidatePosition = candidate[@"position"];
-    NSDictionary *selectorPosition = selector[@"position"];
-    return (
-        fabs([candidatePosition[@"x"] doubleValue]
-            - [selectorPosition[@"x"] doubleValue]) < 0.5
-        && fabs([candidatePosition[@"y"] doubleValue]
-            - [selectorPosition[@"y"] doubleValue]) < 0.5
-    );
+    return nearest;
 }
 
 static int CyclePermissionMode(NSArray<NSString *> *arguments) {
@@ -2065,7 +2118,7 @@ static int CyclePermissionMode(NSArray<NSString *> *arguments) {
         applications.firstObject.processIdentifier
     );
     NSArray<NSDictionary *> *initialCandidates =
-        PermissionModeCandidates(application);
+        PermissionModeSelectors(application);
     if (initialCandidates.count != 1) {
         CFRelease(application);
         return Fail(
@@ -2104,16 +2157,18 @@ static int CyclePermissionMode(NSArray<NSString *> *arguments) {
         return Fail(@"Permission-mode selector has an invalid click frame.");
     }
 
-    NSArray<NSDictionary *> *openCandidates = @[];
     NSMutableArray<NSString *> *availableModes = [NSMutableArray array];
-    NSString *targetMode = nil;
     NSDictionary *target = nil;
+    NSString *targetMode = nil;
     for (NSUInteger attempt = 0; attempt < 20 && target == nil; attempt += 1) {
         usleep(50000);
-        openCandidates = PermissionModeCandidates(application);
+        NSArray<NSDictionary *> *openCandidates =
+            PermissionModeCandidates(application);
         [availableModes removeAllObjects];
         for (NSString *label in PermissionModeLabels()) {
-            if (PermissionModeOption(openCandidates, label, selector) != nil) {
+            if (NearestPermissionModeOption(
+                openCandidates, label, selector
+            ) != nil) {
                 [availableModes addObject:label];
             }
         }
@@ -2124,14 +2179,17 @@ static int CyclePermissionMode(NSArray<NSString *> *arguments) {
             offset < PermissionModeLabels().count;
             offset += 1
         ) {
-            NSUInteger index =
-                (currentIndex + offset) % PermissionModeLabels().count;
-            NSString *label = PermissionModeLabels()[index];
-            NSDictionary *candidate =
-                PermissionModeOption(openCandidates, label, selector);
-            if (candidate != nil) {
-                targetMode = label;
-                target = candidate;
+            NSString *label = PermissionModeLabels()[
+                (currentIndex + offset) % PermissionModeLabels().count
+            ];
+            if (![availableModes containsObject:label]) {
+                continue;
+            }
+            targetMode = label;
+            target = NearestPermissionModeOption(
+                openCandidates, label, selector
+            );
+            if (target != nil) {
                 break;
             }
         }
@@ -2153,15 +2211,12 @@ static int CyclePermissionMode(NSArray<NSString *> *arguments) {
     BOOL selected = NO;
     for (NSUInteger attempt = 0; attempt < 20 && !selected; attempt += 1) {
         usleep(50000);
-        for (
-            NSDictionary *candidate
-            in PermissionModeCandidates(application)
-        ) {
-            if ([candidate[@"label"] isEqualToString:targetMode]
-                && CandidateHasSelectorOrigin(candidate, selector)) {
-                selected = YES;
-                break;
-            }
+        NSArray<NSDictionary *> *remainingCandidates =
+            PermissionModeSelectors(application);
+        if (remainingCandidates.count == 1
+            && [remainingCandidates.firstObject[@"label"]
+                isEqualToString:targetMode]) {
+            selected = YES;
         }
     }
     if (!selected) {
