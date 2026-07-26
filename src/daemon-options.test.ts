@@ -5,25 +5,25 @@ import {
 } from "./daemon-options.js";
 
 describe("parseDaemonOptions", () => {
-  it("defaults both mutation boundaries to disabled", () => {
+  it("defaults both controller capabilities to enabled", () => {
     expect(parseDaemonOptions([], "/project")).toEqual({
       configPath: "/project/config.json",
-      enableActions: false,
-      enableVoice: false,
+      enableActions: true,
+      enableVoice: true,
       macOSHelperPath:
         "/project/helpers/macos-control/bin/macos-control",
     });
   });
 
-  it("enables actions and voice independently", () => {
+  it("disables actions and voice independently", () => {
     expect(
       parseDaemonOptions(
-        ["--enable-actions", "--enable-voice"],
+        ["--disable-actions", "--disable-voice"],
         "/project",
       ),
     ).toMatchObject({
-      enableActions: true,
-      enableVoice: true,
+      enableActions: false,
+      enableVoice: false,
     });
   });
 

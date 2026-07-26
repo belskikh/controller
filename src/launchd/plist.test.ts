@@ -5,7 +5,7 @@ import {
 } from "./plist.js";
 
 describe("renderLaunchAgentPlist", () => {
-  it("uses absolute runtime paths and enables both Codex boundaries", () => {
+  it("uses absolute runtime paths and the enabled-by-default daemon", () => {
     const plist = renderLaunchAgentPlist({
       logDirectory: "/Users/test/Library/Logs/DualSense & Codex",
       nodePath: "/opt/homebrew/bin/node",
@@ -17,8 +17,8 @@ describe("renderLaunchAgentPlist", () => {
     expect(plist).toContain(
       "<string>/Users/test/Codex &lt;Control&gt;/dist/daemon.js</string>",
     );
-    expect(plist).toContain("<string>--enable-actions</string>");
-    expect(plist).toContain("<string>--enable-voice</string>");
+    expect(plist).not.toContain("<string>--disable-actions</string>");
+    expect(plist).not.toContain("<string>--disable-voice</string>");
     expect(plist).toContain("DualSense &amp; Codex/daemon.log");
   });
 });

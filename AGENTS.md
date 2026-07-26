@@ -40,7 +40,8 @@ paired controller and should be treated as the working baseline.
 
 `L1` alternates Codex's `Previous Chat` and `Next Chat` shortcuts. A D-pad
 navigation action resets the next L1 press to `Previous Chat`. Voice control
-requires `--enable-voice`; all other mutations require `--enable-actions`.
+and all other mutations are enabled by default. Use `--disable-voice` or
+`--disable-actions` only for diagnostics.
 
 ## Commands
 
@@ -48,7 +49,7 @@ requires `--enable-voice`; all other mutations require `--enable-actions`.
 npm install
 npm run check
 npm test
-npm run daemon -- --enable-actions --enable-voice
+npm run daemon
 ```
 
 The daemon command builds TypeScript and the native helper before starting.

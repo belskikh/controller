@@ -20,8 +20,8 @@ export function parseDaemonOptions(
     cwd,
     "helpers/macos-control/bin/macos-control",
   );
-  let enableActions = false;
-  let enableVoice = false;
+  let enableActions = true;
+  let enableVoice = true;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -38,11 +38,11 @@ export function parseDaemonOptions(
         index += 1;
         break;
       }
-      case "--enable-actions":
-        enableActions = true;
+      case "--disable-actions":
+        enableActions = false;
         break;
-      case "--enable-voice":
-        enableVoice = true;
+      case "--disable-voice":
+        enableVoice = false;
         break;
       default:
         throw new DaemonOptionsError(`Unknown daemon argument: ${argument}`);

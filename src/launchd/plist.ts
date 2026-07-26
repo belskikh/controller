@@ -22,8 +22,6 @@ export function renderLaunchAgentPlist(
   <array>
     <string>${node}</string>
     <string>${project}/dist/daemon.js</string>
-    <string>--enable-actions</string>
-    <string>--enable-voice</string>
   </array>
   <key>WorkingDirectory</key>
   <string>${project}</string>
