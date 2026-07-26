@@ -3,7 +3,8 @@
 A work-in-progress hardware controller for AI applications on macOS. It can
 approve commands, move between tasks, control dictation, stop work, and provide
 attention feedback. While Codex is frontmost, the DualSense touchpad also acts
-as a relative pointing surface.
+as a relative pointing surface. `Cross` opens a compact model control layer for
+changing Codex Power and selecting Standard or Fast mode.
 
 ![Current controller map](docs/assets/dualsense-codex-map.png)
 
@@ -24,6 +25,8 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
   elements, never saved screen coordinates.
 - Moves and clicks the pointer from the DualSense touchpad only while Codex is
   the frontmost application.
+- Controls the live compact model picker without a hard-coded model or
+  reasoning-effort catalog.
 - Keeps action and voice mutations behind separate opt-in flags.
 - Sends two short vibration pulses when a new task needs attention.
 - Survives controller power cycles with a watchdog and capped reconnect
@@ -36,6 +39,7 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 | Controller input | Current action |
 | --- | --- |
 | `Circle` | Bring the target application to the front and unlock the remaining controls |
+| `Cross` | Open or close the compact model picker |
 | `Create` | Create a new task |
 | `L1` | Toggle between the last two opened tasks |
 | `D-pad up / down` | Move visually through task history |
@@ -50,8 +54,14 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 | Touchpad swipe | Move the mouse pointer |
 | Touchpad press | Left-click at the current pointer location |
 
-Unmapped controls are inert. D-pad navigation resets the next `L1` press to
-the previous task, keeping the two-task toggle predictable.
+While the model picker is open, `D-pad left / right` moves the live Power
+selector one step toward Faster or Smarter, `D-pad up` selects Fast mode, and
+`D-pad down` selects Standard mode. `Circle` closes the picker in this state.
+The controller never enters Advanced model options and does not store a model
+catalog of its own.
+
+Otherwise, D-pad navigation resets the next `L1` press to the previous task,
+keeping the two-task toggle predictable. Unmapped controls are inert.
 
 ## Requirements for the current integration
 
@@ -91,7 +101,7 @@ npm run daemon
 Disable either capability when running diagnostics:
 
 ```sh
-# Keep voice, but disable pointer, approvals, navigation, task creation, and modes
+# Keep voice, but disable pointer, model, approvals, navigation, task creation, and modes
 npm run daemon -- --disable-actions
 
 # Keep actions, but disable native dictation controls
@@ -213,9 +223,9 @@ For detailed hardware gates and the latest acceptance matrix, see the
 [`validated implementation plan`](docs/implementation-plan.md).
 
 Requested work outside the validated v0 baseline is tracked in the
-[controller backlog](docs/backlog.md). It includes the proposed model/thinking
-effort control and configurable mapping profiles; general touchpad pointer
-control is now part of the Codex-only controller path.
+[controller backlog](docs/backlog.md). Model/Power control and the general
+touchpad pointer path are implemented with hardware validation pending;
+configurable mapping profiles remain proposed.
 
 ## Acknowledgments
 

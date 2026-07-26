@@ -8,7 +8,7 @@ describe("validateConfig", () => {
     debounceMs: 80,
     bindings: {
       circle: { press: "focusCodex" },
-      cross: { press: "accept" },
+      cross: { press: "modelPower.toggle" },
       triangle: { press: "clearInput" },
     },
   };

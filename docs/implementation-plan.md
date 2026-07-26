@@ -158,6 +158,25 @@ Validated on the paired Bluetooth controller:
 The tracking and command path are covered by automated tests. Pointer feel and
 the full Bluetooth path still require validation on the paired controller.
 
+### M7 — compact model Power control
+
+1. Resolve the model trigger relative to the single live editable composer,
+   using only current Accessibility frames and requiring one unique candidate.
+2. Open the picker and normalize an existing Advanced view back to Compact
+   before exposing controller actions.
+3. Map `Cross` to a modal layer: left/right changes Power one step, up selects
+   Fast, down selects Standard, and `Cross` or `Circle` closes.
+4. Acknowledge a verified open result before entering modal routing. Consume a
+   stale modal press and reset on adapter failure rather than leaking the
+   underlying D-pad action.
+5. Reset local picker state without sending UI input after focus loss,
+   disconnect, watchdog failure, adapter error, or shutdown.
+
+The native helper inspection and open/close path have been exercised against
+the current Codex compact picker. TypeScript and native builds plus automated
+routing/adapter tests pass. One-step Power changes, Fast/Standard selection,
+and the complete paired Bluetooth path still require hardware validation.
+
 ## Final Bluetooth acceptance matrix
 
 | DualSense input | Codex result | Status |
@@ -170,6 +189,9 @@ the full Bluetooth path still require validation on the paired controller.
 | Circle | Activate Codex globally | Passed |
 | Create | New chat | Passed |
 | Triangle | Clear input draft | Passed |
+| Cross | Open/close compact model picker | Automated + native UI open/close; hardware pending |
+| D-pad left/right while picker is open | Move live Power one step | Automated; hardware pending |
+| D-pad up/down while picker is open | Select Fast/Standard | Automated; hardware pending |
 | D-pad up/down | Next/previous task | Passed |
 | D-pad left | Cycle permission mode | Automated; hardware pending |
 | D-pad right | Dictate / transcribe and send | Passed |

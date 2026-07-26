@@ -5,6 +5,10 @@ export interface AgentAdapter {
   decline(): Promise<void>;
   focus(): Promise<void>;
   interrupt(): Promise<void>;
+  openModelPower(): Promise<boolean>;
+  closeModelPower(): Promise<void>;
+  adjustModelPower(direction: -1 | 1): Promise<void>;
+  setModelPowerSpeed(mode: "standard" | "fast"): Promise<void>;
   newThread(): Promise<void>;
   cyclePermissionMode(): Promise<void>;
   toggleLastTask(): Promise<void>;

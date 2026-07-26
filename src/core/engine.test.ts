@@ -7,7 +7,7 @@ const config: ControllerConfig = {
   startEnabled: false,
   debounceMs: 80,
   bindings: {
-    cross: { press: "accept" },
+    cross: { press: "modelPower.toggle" },
     mute: { press: "voice.cancel" },
     "dpad.up": { press: "switchPrevious" },
     "dpad.left": { press: "permissionMode.next" },
@@ -31,7 +31,7 @@ describe("ControllerEngine", () => {
       { type: "state", enabled: true },
     ]);
     expect(engine.handle({ control: "cross", phase: "press" }, 200)).toEqual([
-      { type: "action", action: "accept" },
+      { type: "action", action: "modelPower.open" },
     ]);
   });
 
@@ -54,11 +54,12 @@ describe("ControllerEngine", () => {
   it("debounces repeated physical events", () => {
     const engine = new ControllerEngine({ ...config, startEnabled: true });
     engine.handle({ control: "cross", phase: "press" }, 100);
+    engine.synchronizeModelPower(true);
     expect(engine.handle({ control: "cross", phase: "press" }, 150)).toEqual([
       { type: "ignored", reason: "debounced" },
     ]);
     expect(engine.handle({ control: "cross", phase: "press" }, 180)).toEqual([
-      { type: "action", action: "accept" },
+      { type: "action", action: "modelPower.close" },
     ]);
   });
 
@@ -109,5 +110,112 @@ describe("ControllerEngine", () => {
     expect(engine.handle(event, 200)).toEqual([
       { type: "action", action: "pointer.click" },
     ]);
+  });
+
+  it("routes the D-pad through the compact model picker while it is open", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    expect(engine.handle({ control: "cross", phase: "press" }, 100)).toEqual([
+      { type: "action", action: "modelPower.open" },
+    ]);
+    expect(engine.modelPowerActive).toBe(false);
+    engine.synchronizeModelPower(true);
+    expect(engine.modelPowerActive).toBe(true);
+    expect(
+      engine.handle({ control: "dpad.left", phase: "press" }, 200),
+    ).toEqual([
+      { type: "action", action: "modelPower.decrease" },
+    ]);
+    expect(
+      engine.handle({ control: "dpad.right", phase: "press" }, 300),
+    ).toEqual([
+      { type: "action", action: "modelPower.increase" },
+    ]);
+    expect(
+      engine.handle({ control: "dpad.up", phase: "press" }, 400),
+    ).toEqual([
+      { type: "action", action: "modelPower.fast" },
+    ]);
+    expect(
+      engine.handle({ control: "dpad.down", phase: "press" }, 500),
+    ).toEqual([
+      { type: "action", action: "modelPower.standard" },
+    ]);
+  });
+
+  it("closes the model picker with Cross or Circle", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    engine.handle({ control: "cross", phase: "press" }, 100);
+    engine.synchronizeModelPower(true);
+    expect(engine.handle({ control: "cross", phase: "press" }, 200)).toEqual([
+      { type: "action", action: "modelPower.close" },
+    ]);
+    expect(engine.modelPowerActive).toBe(false);
+
+    engine.handle({ control: "cross", phase: "press" }, 300);
+    engine.synchronizeModelPower(true);
+    expect(engine.handle({ control: "circle", phase: "press" }, 400)).toEqual([
+      { type: "action", action: "modelPower.close" },
+    ]);
+    expect(engine.modelPowerActive).toBe(false);
+  });
+
+  it("does not repeat picker actions for physical button releases", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    engine.handle({ control: "cross", phase: "press" }, 100);
+    engine.synchronizeModelPower(true);
+    expect(engine.handle({ control: "cross", phase: "release" }, 150)).toEqual([
+      { type: "ignored", reason: "unbound" },
+    ]);
+    expect(
+      engine.handle({ control: "dpad.left", phase: "release" }, 200),
+    ).toEqual([
+      { type: "ignored", reason: "unbound" },
+    ]);
+    expect(engine.modelPowerActive).toBe(true);
+  });
+
+  it("closes the picker before dispatching another bound action", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    engine.handle({ control: "cross", phase: "press" }, 100);
+    engine.synchronizeModelPower(true);
+    expect(engine.handle({ control: "triangle", phase: "press" }, 200)).toEqual([
+      { type: "action", action: "modelPower.close" },
+      { type: "action", action: "clearInput" },
+    ]);
+    expect(engine.modelPowerActive).toBe(false);
+  });
+
+  it("forgets picker state without sending UI input when Codex loses focus", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    engine.handle({ control: "cross", phase: "press" }, 100);
+    engine.synchronizeModelPower(true);
+    expect(engine.synchronizeEnabled(false)).toEqual([
+      { type: "state", enabled: false },
+      { type: "action", action: "voice.cancel" },
+    ]);
+    expect(engine.modelPowerActive).toBe(false);
+  });
+
+  it("enters picker state only after successful UI verification", () => {
+    const engine = new ControllerEngine({ ...config, startEnabled: true });
+
+    engine.handle({ control: "cross", phase: "press" }, 100);
+    expect(engine.modelPowerActive).toBe(false);
+    engine.synchronizeModelPower(false);
+    expect(
+      engine.handle({ control: "dpad.left", phase: "press" }, 200),
+    ).toEqual([
+      { type: "action", action: "permissionMode.next" },
+    ]);
+
+    engine.synchronizeModelPower(true);
+    expect(engine.modelPowerActive).toBe(true);
+    engine.resetModelPower();
+    expect(engine.modelPowerActive).toBe(false);
   });
 });

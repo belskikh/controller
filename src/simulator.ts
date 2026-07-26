@@ -39,6 +39,23 @@ async function main(): Promise<void> {
         outputs.some(
           (output) =>
             output.type === "action"
+            && output.action === "modelPower.open",
+        )
+      ) {
+        engine.synchronizeModelPower(true);
+        process.stdout.write(
+          `${JSON.stringify({
+            event,
+            simulated: "model-picker-open",
+            type: "state",
+            modelPowerOpen: true,
+          })}\n`,
+        );
+      }
+      if (
+        outputs.some(
+          (output) =>
+            output.type === "action"
             && output.action === "focusCodex",
         )
       ) {

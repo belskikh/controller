@@ -102,6 +102,91 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
     await this.press("button", this.labels.interrupt);
   }
 
+  async openModelPower(): Promise<boolean> {
+    await this.assertFrontmost();
+    const result = await this.client.openModelPower(
+      CODEX_BUNDLE_IDENTIFIER,
+      this.mutationsEnabled,
+    );
+    if (result.triggerMatched !== 1) {
+      throw new CodexAccessibilityError(
+        "Expected exactly one model control in the active composer.",
+      );
+    }
+    const active = Boolean(result.open) && result.compact;
+    if (this.mutationsEnabled && !active) {
+      throw new CodexAccessibilityError(
+        "The compact model picker did not open.",
+      );
+    }
+    return active;
+  }
+
+  async closeModelPower(): Promise<void> {
+    await this.assertFrontmost();
+    const result = await this.client.closeModelPower(
+      CODEX_BUNDLE_IDENTIFIER,
+      this.mutationsEnabled,
+    );
+    if (
+      this.mutationsEnabled
+      && !result.closed
+      && !result.alreadyClosed
+    ) {
+      throw new CodexAccessibilityError(
+        "The model picker did not close.",
+      );
+    }
+  }
+
+  async adjustModelPower(direction: -1 | 1): Promise<void> {
+    await this.assertFrontmost();
+    const result = await this.client.adjustModelPower(
+      CODEX_BUNDLE_IDENTIFIER,
+      direction === -1 ? "decrease" : "increase",
+      this.mutationsEnabled,
+    );
+    if (result.sent !== this.mutationsEnabled) {
+      throw new CodexAccessibilityError(
+        "Unexpected model Power adjustment result.",
+      );
+    }
+    if (
+      this.mutationsEnabled
+      && !result.changed
+      && !Boolean(result.atBoundary)
+    ) {
+      throw new CodexAccessibilityError(
+        "Model Power did not change and was not at an endpoint.",
+      );
+    }
+  }
+
+  async setModelPowerSpeed(mode: "standard" | "fast"): Promise<void> {
+    await this.assertFrontmost();
+    const result = await this.client.setModelPowerSpeed(
+      CODEX_BUNDLE_IDENTIFIER,
+      mode,
+      this.mutationsEnabled,
+    );
+    if (result.alreadySelected) {
+      if (!result.selected || result.changed) {
+        throw new CodexAccessibilityError(
+          "Unexpected idempotent model speed result.",
+        );
+      }
+      return;
+    }
+    if (
+      result.changed !== this.mutationsEnabled
+      || result.selected !== this.mutationsEnabled
+    ) {
+      throw new CodexAccessibilityError(
+        `The ${mode} model speed could not be selected.`,
+      );
+    }
+  }
+
   async cyclePermissionMode(): Promise<void> {
     await this.assertFrontmost();
     const result = await this.client.cyclePermissionMode(

@@ -1,5 +1,14 @@
 # Standard model and Power controls plan
 
+## Implementation status
+
+Implemented on the dedicated `codex/model-effort-control-plan` branch.
+The implementation follows this design with an explicit daemon acknowledgement:
+the engine does not enter modal state until the native adapter verifies that
+the compact picker is open. Native inspection and open/close were exercised
+against the current Codex UI; paired-controller Power and speed validation is
+still pending.
+
 ## Decision
 
 Add a modal controller layer behind the currently unassigned DualSense

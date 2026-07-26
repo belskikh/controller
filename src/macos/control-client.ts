@@ -66,6 +66,57 @@ export interface CyclePermissionModeResult {
   targetMode: string | null;
 }
 
+export interface ModelPowerInspectResult {
+  bundleIdentifier: string;
+  compact: boolean | number;
+  open: boolean | number;
+  powerMatched: number;
+  speedMode: "standard" | "fast" | null;
+  triggerError: string | null;
+  triggerLabel: string | null;
+  triggerMatched: number;
+  view: "closed" | "compact" | "advanced";
+}
+
+export interface ModelPowerOpenResult {
+  alreadyOpen: boolean;
+  bundleIdentifier: string;
+  compact: boolean;
+  compactChanged: boolean;
+  open: boolean | number;
+  opened: boolean;
+  triggerLabel: string | null;
+  triggerMatched: number;
+}
+
+export interface ModelPowerCloseResult {
+  alreadyClosed: boolean;
+  bundleIdentifier: string;
+  closed: boolean;
+  open: boolean | number;
+}
+
+export interface ModelPowerAdjustResult {
+  atBoundary: boolean | number;
+  bundleIdentifier: string;
+  changed: boolean;
+  compactChanged: boolean;
+  currentValue: string;
+  direction: "decrease" | "increase";
+  previousValue: string;
+  sent: boolean;
+}
+
+export interface ModelPowerSpeedResult {
+  alreadySelected: boolean;
+  bundleIdentifier: string;
+  changed: boolean;
+  compactChanged: boolean;
+  currentMode: "standard" | "fast";
+  selected: boolean;
+  targetMode: "standard" | "fast";
+}
+
 export interface ControlClient {
   status(): Promise<ControlStatus>;
   activate(
@@ -94,6 +145,27 @@ export interface ControlClient {
     bundleIdentifier: string,
     confirm: boolean,
   ): Promise<CyclePermissionModeResult>;
+  inspectModelPower(
+    bundleIdentifier: string,
+  ): Promise<ModelPowerInspectResult>;
+  openModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerOpenResult>;
+  closeModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerCloseResult>;
+  adjustModelPower(
+    bundleIdentifier: string,
+    direction: "decrease" | "increase",
+    confirm: boolean,
+  ): Promise<ModelPowerAdjustResult>;
+  setModelPowerSpeed(
+    bundleIdentifier: string,
+    mode: "standard" | "fast",
+    confirm: boolean,
+  ): Promise<ModelPowerSpeedResult>;
   press(
     bundleIdentifier: string,
     role: ControlRole,
@@ -192,6 +264,75 @@ export class MacOSControlClient implements ControlClient {
       "cycle-permission-mode",
       "--bundle-id",
       bundleIdentifier,
+      ...(confirm ? ["--confirm"] : []),
+    ]);
+  }
+
+  async inspectModelPower(
+    bundleIdentifier: string,
+  ): Promise<ModelPowerInspectResult> {
+    return this.run<ModelPowerInspectResult>([
+      "model-power",
+      "inspect",
+      "--bundle-id",
+      bundleIdentifier,
+    ]);
+  }
+
+  async openModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerOpenResult> {
+    return this.run<ModelPowerOpenResult>([
+      "model-power",
+      "open",
+      "--bundle-id",
+      bundleIdentifier,
+      ...(confirm ? ["--confirm"] : []),
+    ]);
+  }
+
+  async closeModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerCloseResult> {
+    return this.run<ModelPowerCloseResult>([
+      "model-power",
+      "close",
+      "--bundle-id",
+      bundleIdentifier,
+      ...(confirm ? ["--confirm"] : []),
+    ]);
+  }
+
+  async adjustModelPower(
+    bundleIdentifier: string,
+    direction: "decrease" | "increase",
+    confirm: boolean,
+  ): Promise<ModelPowerAdjustResult> {
+    return this.run<ModelPowerAdjustResult>([
+      "model-power",
+      "adjust",
+      "--bundle-id",
+      bundleIdentifier,
+      "--direction",
+      direction,
+      ...(confirm ? ["--confirm"] : []),
+    ]);
+  }
+
+  async setModelPowerSpeed(
+    bundleIdentifier: string,
+    mode: "standard" | "fast",
+    confirm: boolean,
+  ): Promise<ModelPowerSpeedResult> {
+    return this.run<ModelPowerSpeedResult>([
+      "model-power",
+      "speed",
+      "--bundle-id",
+      bundleIdentifier,
+      "--mode",
+      mode,
       ...(confirm ? ["--confirm"] : []),
     ]);
   }

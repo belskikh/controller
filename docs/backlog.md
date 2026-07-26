@@ -13,7 +13,7 @@ This backlog records requested work that is not part of the validated v0 baselin
 
 **Done when:** dictation started from the controller records through its microphone while Codex is frontmost, and no laptop-microphone audio is captured or system-wide input setting is changed.
 
-## Composer model and thinking-effort control
+## Composer model and thinking-effort control — implemented; hardware validation pending
 
 **Goal:** bind the currently unassigned `Cross` button to a modal controller
 layer for Codex's compact, standard model picker. Use the live `Power` slider
@@ -32,10 +32,23 @@ draft-clear action.
   endpoints, idempotent speed selection, unavailable controls, and every reset
   path.
 
+The compact picker is now resolved from the single live editable composer and
+its nearby enabled pop-up button. `Cross` enters the modal layer only after the
+opened compact picker is verified. The four D-pad directions are rerouted
+while that layer is active, and the state resets on focus loss, adapter error,
+disconnect, and shutdown. There is no model/effort catalog or Advanced-mode
+path in the daemon.
+
+Automated coverage verifies modal routing, open acknowledgement, reset paths,
+one-step Power dispatch, endpoints, idempotent speed selection, and dry-run
+behavior. The native helper has also been exercised against the current Codex
+UI for inspection and open/close. The full Bluetooth controller path remains
+to be validated.
+
 The detailed design, implementation sequence, and validation matrix are in
 [`model-power-controls-plan.md`](model-power-controls-plan.md).
 
-**Done when:** a paired Bluetooth controller changes only the currently visible
+**Hardware validation is complete when:** a paired Bluetooth controller changes only the currently visible
 Codex compact composer selector, never enters Advanced or changes a setting
 outside Codex, and emits a dry-run trace before mutations are enabled.
 
