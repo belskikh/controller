@@ -15,14 +15,29 @@ This backlog records requested work that is not part of the validated v0 baselin
 
 ## Composer model and thinking-effort control
 
-**Goal:** bind the currently unassigned `Cross` button to cycle the active composer control between the model selector and the thinking-effort selector; a subsequent `Cross` press moves to the next enabled option in that control. The cycle must be deterministic: `model selector -> thinking effort -> model selector`. `Triangle` keeps its validated draft-clear action.
+**Goal:** bind the currently unassigned `Cross` button to a modal controller
+layer for Codex's compact, standard model picker. Use the live `Power` slider
+for model/reasoning bundles and allow idempotent selection of Standard or Fast
+mode. Do not enter or control `Advanced`. `Triangle` keeps its validated
+draft-clear action.
 
-- Add distinct actions for selecting the next model and the next thinking effort, then retain the small focus-cycle state only while Codex is frontmost.
-- Resolve the live composer, selector, and enabled options through Accessibility on every press. Do not use saved screen positions or a fixed list of models/effort levels.
-- Fail closed if a unique selector or next option is unavailable; reset the cycle on task navigation, focus loss, disconnect, adapter error, and shutdown.
-- Expose the binding in `config.json`; test model-only, effort-only, unavailable-selector, and focus-loss cases.
+- `Cross` opens/closes the compact picker; while it is open, D-pad left/right
+  adjusts Power, D-pad up selects Fast, and D-pad down selects Standard.
+- Resolve the live composer, compact picker, Power control, and Fast-mode item
+  through Accessibility on every press. Do not use saved screen positions or a
+  fixed model/effort catalog.
+- Fail closed if a unique control is unavailable; reset modal state on task
+  navigation, focus loss, disconnect, adapter error, and shutdown.
+- Expose the `Cross` binding in `config.json`; test modal routing, slider
+  endpoints, idempotent speed selection, unavailable controls, and every reset
+  path.
 
-**Done when:** a paired Bluetooth controller changes only the currently visible Codex composer selector, never changes a setting outside Codex, and emits a dry-run trace before mutations are enabled.
+The detailed design, implementation sequence, and validation matrix are in
+[`model-power-controls-plan.md`](model-power-controls-plan.md).
+
+**Done when:** a paired Bluetooth controller changes only the currently visible
+Codex compact composer selector, never enters Advanced or changes a setting
+outside Codex, and emits a dry-run trace before mutations are enabled.
 
 ## DualSense touchpad as a pointing surface — implemented; hardware validation pending
 
