@@ -206,6 +206,11 @@ npm run daemon:background -- stop
 For detailed hardware gates and the latest acceptance matrix, see the
 [`validated implementation plan`](docs/implementation-plan.md).
 
+Requested work outside the validated v0 baseline is tracked in the
+[controller backlog](docs/backlog.md). It includes the proposed model/thinking
+effort control and configurable mapping profiles; general touchpad pointer
+control remains blocked until the project safety scope is explicitly expanded.
+
 ## Acknowledgments
 
 Initial concept co-created with [@glebsinev](https://github.com/glebsinev).
