@@ -2,7 +2,8 @@
 
 A work-in-progress hardware controller for AI applications on macOS. It can
 approve commands, move between tasks, control dictation, stop work, and provide
-attention feedback.
+attention feedback. While Codex is frontmost, the DualSense touchpad also acts
+as a relative pointing surface.
 
 ![Current controller map](docs/assets/dualsense-codex-map.png)
 
@@ -21,6 +22,8 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
   actions.
 - Controls the current target application through live macOS Accessibility
   elements, never saved screen coordinates.
+- Moves and clicks the pointer from the DualSense touchpad only while Codex is
+  the frontmost application.
 - Keeps action and voice mutations behind separate opt-in flags.
 - Sends two short vibration pulses when a new task needs attention.
 - Survives controller power cycles with a watchdog and capped reconnect
@@ -44,6 +47,8 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 | `L2` | Deny |
 | `Square` | Stop the current operation |
 | `Triangle` | Clear the current input draft |
+| Touchpad swipe | Move the mouse pointer |
+| Touchpad press | Left-click at the current pointer location |
 
 Unmapped controls are inert. D-pad navigation resets the next `L1` press to
 the previous task, keeping the two-task toggle predictable.
@@ -86,7 +91,7 @@ npm run daemon
 Disable either capability when running diagnostics:
 
 ```sh
-# Keep voice, but disable approvals, navigation, task creation, and modes
+# Keep voice, but disable pointer, approvals, navigation, task creation, and modes
 npm run daemon -- --disable-actions
 
 # Keep actions, but disable native dictation controls
@@ -96,9 +101,9 @@ npm run daemon -- --disable-voice
 npm run daemon -- --disable-actions --disable-voice
 ```
 
-When the target application loses focus, the daemon locks immediately and cancels active
-dictation. `Circle` remains available globally so the controller can bring
-the application back.
+When the target application loses focus, the daemon locks immediately, stops
+touchpad pointer output, and cancels active dictation. `Circle` remains
+available globally so the controller can bring the application back.
 
 ## Explore safely
 
@@ -210,7 +215,7 @@ For detailed hardware gates and the latest acceptance matrix, see the
 Requested work outside the validated v0 baseline is tracked in the
 [controller backlog](docs/backlog.md). It includes the proposed model/thinking
 effort control and configurable mapping profiles; general touchpad pointer
-control remains blocked until the project safety scope is explicitly expanded.
+control is now part of the Codex-only controller path.
 
 ## Acknowledgments
 

@@ -30,6 +30,9 @@
     "triangle": {
       "press": "clearInput"
     },
+    "touchpad.button": {
+      "press": "pointer.click"
+    },
     "dpad.up": {
       "press": "switchPrevious"
     },

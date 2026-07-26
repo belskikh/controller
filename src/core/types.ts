@@ -7,6 +7,7 @@ export const ACTIONS = [
   "interrupt",
   "newThread",
   "permissionMode.next",
+  "pointer.click",
   "toggleLastTask",
   "switchPrevious",
   "switchNext",

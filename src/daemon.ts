@@ -13,6 +13,7 @@ import {
   type BluetoothHIDConnection,
 } from "./dualsense/bluetooth.js";
 import { subscribeButtonEvents } from "./dualsense/input-events.js";
+import { subscribeTouchpadPointer } from "./dualsense/touchpad-pointer.js";
 import { BluetoothDualSenseOutput } from "./dualsense/output.js";
 import { DualSenseFeedbackPolicy } from "./dualsense/feedback.js";
 import {
@@ -23,6 +24,7 @@ import {
 import { CodexVoiceAccessibilityAdapter } from "./adapters/codex-voice-accessibility.js";
 import { MacOSControlClient } from "./macos/control-client.js";
 import { MacOSFrontmostMonitor } from "./macos/frontmost-monitor.js";
+import { MacOSPointerStream } from "./macos/pointer-stream.js";
 import {
   AttentionTracker,
   MacOSAttentionMonitor,
@@ -58,6 +60,10 @@ async function main(): Promise<void> {
     controlClient,
     options.enableVoice,
   );
+  const pointer = new MacOSPointerStream(
+    options.macOSHelperPath,
+    CODEX_BUNDLE_IDENTIFIER,
+  );
   const shutdown = new AbortController();
   const requestShutdown = (): void => shutdown.abort();
   process.once("SIGINT", requestShutdown);
@@ -87,6 +93,7 @@ async function main(): Promise<void> {
           engine,
           codex,
           voice,
+          pointer,
           options,
           shutdown.signal,
         );
@@ -118,6 +125,7 @@ async function runConnectedSession(
   engine: ControllerEngine,
   codex: CodexAccessibilityAdapter,
   voice: CodexVoiceAccessibilityAdapter,
+  pointer: MacOSPointerStream,
   options: ReturnType<typeof parseDaemonOptions>,
   signal: AbortSignal,
 ): Promise<SessionEndReason> {
@@ -130,6 +138,7 @@ async function runConnectedSession(
   let work = Promise.resolve();
   let acceptingInput = true;
   let unsubscribeInput = (): void => {};
+  let unsubscribePointer = (): void => {};
   const frontmostMonitor = new MacOSFrontmostMonitor(
     options.macOSHelperPath,
     CODEX_BUNDLE_IDENTIFIER,
@@ -146,7 +155,9 @@ async function runConnectedSession(
         output,
         codex,
         voice,
+        pointer,
         feedback,
+        options.enableActions,
         options.enableVoice,
       );
     }
@@ -189,7 +200,9 @@ async function runConnectedSession(
             output,
             codex,
             voice,
+            pointer,
             feedback,
+            options.enableActions,
             options.enableVoice,
           );
         }
@@ -230,6 +243,7 @@ async function runConnectedSession(
       (state) => enqueueAvailability(state.targetFrontmost),
       (error) => {
         emitError(error);
+        pointer.stop();
         enqueueAvailability(false);
       },
     );
@@ -242,6 +256,21 @@ async function runConnectedSession(
       },
       emitError,
     );
+    if (options.enableActions) {
+      pointer.start((error) => {
+        emitError(error);
+        pointer.stop();
+        enqueueAvailability(false);
+      });
+      unsubscribePointer = subscribeTouchpadPointer(
+        connection.hid,
+        ({ dx, dy }) => {
+          if (acceptingInput && engine.active) {
+            pointer.move(dx, dy);
+          }
+        },
+      );
+    }
     unsubscribeInput = subscribeButtonEvents(connection.hid, enqueueEvent);
     emit("ready", {
       actionsEnabled: options.enableActions,
@@ -256,6 +285,8 @@ async function runConnectedSession(
     frontmostMonitor.stop();
     attentionMonitor.stop();
     unsubscribeInput();
+    unsubscribePointer();
+    pointer.stop();
     await work.catch(() => {});
     engine.disable();
     if (options.enableVoice) {
@@ -279,7 +310,9 @@ async function handleEngineOutput(
   output: EngineOutput,
   codex: CodexAccessibilityAdapter,
   voice: CodexVoiceAccessibilityAdapter,
+  pointer: MacOSPointerStream,
   feedback: DualSenseFeedbackPolicy,
+  actionsEnabled: boolean,
   voiceEnabled: boolean,
 ): Promise<void> {
   if (output.type === "ignored") {
@@ -317,6 +350,11 @@ async function handleEngineOutput(
       break;
     case "permissionMode.next":
       await codex.cyclePermissionMode();
+      break;
+    case "pointer.click":
+      if (actionsEnabled) {
+        await pointer.click();
+      }
       break;
     case "toggleLastTask":
       await codex.toggleLastTask();

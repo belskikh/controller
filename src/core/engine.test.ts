@@ -14,6 +14,7 @@ const config: ControllerConfig = {
     "dpad.right": { press: "voice.toggle" },
     circle: { press: "focusCodex" },
     triangle: { press: "clearInput" },
+    "touchpad.button": { press: "pointer.click" },
   },
 };
 
@@ -94,6 +95,19 @@ describe("ControllerEngine", () => {
 
     expect(engine.handle({ control: "triangle", phase: "press" }, 100)).toEqual([
       { type: "action", action: "clearInput" },
+    ]);
+  });
+
+  it("keeps touchpad clicks behind the frontmost-Codex gate", () => {
+    const engine = new ControllerEngine(config);
+    const event = { control: "touchpad.button", phase: "press" } as const;
+
+    expect(engine.handle(event, 100)).toEqual([
+      { type: "ignored", reason: "disabled" },
+    ]);
+    engine.synchronizeEnabled(true);
+    expect(engine.handle(event, 200)).toEqual([
+      { type: "action", action: "pointer.click" },
     ]);
   });
 });

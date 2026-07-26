@@ -24,15 +24,21 @@ This backlog records requested work that is not part of the validated v0 baselin
 
 **Done when:** a paired Bluetooth controller changes only the currently visible Codex composer selector, never changes a setting outside Codex, and emits a dry-run trace before mutations are enabled.
 
-## DualSense touchpad as a pointing surface — blocked by scope decision
+## DualSense touchpad as a pointing surface — implemented; hardware validation pending
 
-**Requested behavior:** moving a finger across the DualSense touchpad moves the macOS pointer; pressing the touchpad sends a primary mouse click.
+Moving a finger across the DualSense touchpad now moves the macOS pointer
+relatively, with reduced linear sensitivity. Pressing the touchpad sends one
+primary mouse click at the current pointer location.
 
-**Conflict:** the project safety scope explicitly excludes Cursor, Handy, and general pointer control. Existing Codex controls may click only a uniquely resolved, live Accessibility element at its current frame. A free pointer violates that boundary and cannot be added under the current rules.
+The path remains Bluetooth-only and is governed by `--disable-actions`. Both
+the daemon gate and the persistent native pointer helper require Codex to be
+frontmost. The native helper checks the live frontmost bundle again before
+every movement or click, and the stream is destroyed on disconnect, adapter
+error, or shutdown.
 
-**Decision required before implementation:** explicitly expand the project scope and define a separate opt-in capability (for example `--enable-pointer`), its macOS permissions, an immediate disable gesture, touchpad scaling/acceleration, and how the frontmost-Codex gate applies.
-
-**If approved, done when:** it is Bluetooth-only and disabled by default; pointer movement and click stop immediately on focus loss, disconnect, adapter error, and shutdown; and tests cover accidental input plus the complete disable path. It must not use fixed screen coordinates for Codex-specific actions.
+Automated coverage verifies contact anchoring, contact-ID changes,
+discontinuity rejection, movement limits, and command framing. End-to-end
+feel and click behavior remain to be validated on the paired controller.
 
 ## User mapping profiles and key reassignment
 

@@ -21,6 +21,7 @@ normalized input -> safety engine -> Codex Accessibility adapter
                          |                    |
                          |                    +-> approvals and navigation
                          |                    +-> native Codex dictation
+                         +-> guarded native pointer stream
                          v
                    feedback policy -> Bluetooth HID output
 ```
@@ -61,6 +62,8 @@ on the actual paired controller.
 5. Refuse ambiguous matches. For Electron controls where `AXPress` reports
    success but does nothing, derive a click point from the single matched
    element's live AX frame; never use hard-coded screen coordinates.
+6. Keep relative pointer input in a persistent helper that checks Codex's live
+   frontmost bundle before every mouse event.
 
 ### M3 — Codex Desktop adapter
 
@@ -139,6 +142,22 @@ Validated on the paired Bluetooth controller:
   `/opt/homebrew/bin/node` path. It remains intentionally uninstalled until
   login startup is explicitly authorized.
 
+### M6 — Codex-only touchpad pointer
+
+1. Treat a new DualSense touch contact as an anchor and emit movement only for
+   subsequent samples with the same contact ID.
+2. Apply reduced linear sensitivity and reject discontinuities so contact
+   changes cannot jump the cursor.
+3. Map the physical touchpad press to one primary click at the live cursor
+   location.
+4. Require both the daemon's enabled state and a native frontmost-Codex check
+   for every movement or click.
+5. Destroy the native stream on focus-monitor failure, disconnect, HID error,
+   watchdog timeout, and shutdown.
+
+The tracking and command path are covered by automated tests. Pointer feel and
+the full Bluetooth path still require validation on the paired controller.
+
 ## Final Bluetooth acceptance matrix
 
 | DualSense input | Codex result | Status |
@@ -155,6 +174,8 @@ Validated on the paired Bluetooth controller:
 | D-pad left | Cycle permission mode | Automated; hardware pending |
 | D-pad right | Dictate / transcribe and send | Passed |
 | Mute | Cancel dictation without sending | Passed |
+| Touchpad swipe | Move pointer while Codex is frontmost | Automated; hardware pending |
+| Touchpad press | Primary click at current pointer | Automated; hardware pending |
 | Codex attention card | Double vibration pulse | Automated; hardware pending |
 | Power off/on | Reconnect with disabled state | Passed |
 

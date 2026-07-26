@@ -1,5 +1,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #import <Cocoa/Cocoa.h>
+#import <float.h>
+#import <math.h>
 #import <unistd.h>
 
 static void WriteJSON(NSDictionary *payload, FILE *stream) {
@@ -650,6 +652,197 @@ static BOOL ApplicationIsFrontmost(NSString *bundleIdentifier) {
         NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier
         isEqualToString:bundleIdentifier
     ];
+}
+
+static CGPoint PointConstrainedToActiveDisplays(CGPoint point) {
+    uint32_t displayCount = 0;
+    if (CGGetActiveDisplayList(0, NULL, &displayCount) != kCGErrorSuccess
+        || displayCount == 0) {
+        return point;
+    }
+
+    CGDirectDisplayID *displays = calloc(
+        displayCount,
+        sizeof(CGDirectDisplayID)
+    );
+    if (displays == NULL) {
+        return point;
+    }
+    uint32_t resolvedCount = 0;
+    if (CGGetActiveDisplayList(
+        displayCount,
+        displays,
+        &resolvedCount
+    ) != kCGErrorSuccess || resolvedCount == 0) {
+        free(displays);
+        return point;
+    }
+
+    CGPoint closest = point;
+    double closestDistanceSquared = DBL_MAX;
+    for (uint32_t index = 0; index < resolvedCount; index += 1) {
+        CGRect bounds = CGDisplayBounds(displays[index]);
+        if (CGRectContainsPoint(bounds, point)) {
+            free(displays);
+            return point;
+        }
+        double x = fmax(
+            CGRectGetMinX(bounds),
+            fmin(CGRectGetMaxX(bounds) - 1.0, point.x)
+        );
+        double y = fmax(
+            CGRectGetMinY(bounds),
+            fmin(CGRectGetMaxY(bounds) - 1.0, point.y)
+        );
+        double dx = point.x - x;
+        double dy = point.y - y;
+        double distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < closestDistanceSquared) {
+            closest = CGPointMake(x, y);
+            closestDistanceSquared = distanceSquared;
+        }
+    }
+    free(displays);
+    return closest;
+}
+
+static BOOL MovePointer(double dx, double dy) {
+    CGEventRef current = CGEventCreate(NULL);
+    if (current == NULL) {
+        return NO;
+    }
+    CGPoint location = CGEventGetLocation(current);
+    CFRelease(current);
+    CGPoint target = PointConstrainedToActiveDisplays(
+        CGPointMake(location.x + dx, location.y + dy)
+    );
+    CGEventRef move = CGEventCreateMouseEvent(
+        NULL,
+        kCGEventMouseMoved,
+        target,
+        kCGMouseButtonLeft
+    );
+    if (move == NULL) {
+        return NO;
+    }
+    CGEventPost(kCGHIDEventTap, move);
+    CFRelease(move);
+    return YES;
+}
+
+static BOOL ClickPointer(void) {
+    CGEventRef current = CGEventCreate(NULL);
+    if (current == NULL) {
+        return NO;
+    }
+    CGPoint location = CGEventGetLocation(current);
+    CFRelease(current);
+    CGEventRef down = CGEventCreateMouseEvent(
+        NULL,
+        kCGEventLeftMouseDown,
+        location,
+        kCGMouseButtonLeft
+    );
+    CGEventRef up = CGEventCreateMouseEvent(
+        NULL,
+        kCGEventLeftMouseUp,
+        location,
+        kCGMouseButtonLeft
+    );
+    if (down == NULL || up == NULL) {
+        if (down != NULL) CFRelease(down);
+        if (up != NULL) CFRelease(up);
+        return NO;
+    }
+    CGEventPost(kCGHIDEventTap, down);
+    CGEventPost(kCGHIDEventTap, up);
+    CFRelease(down);
+    CFRelease(up);
+    return YES;
+}
+
+static int PointerStream(NSArray<NSString *> *arguments) {
+    if (!AXIsProcessTrusted()) {
+        return Fail(@"Accessibility permission is not granted to macos-control.");
+    }
+
+    NSString *bundleIdentifier = nil;
+    for (NSUInteger index = 0; index < arguments.count;) {
+        NSString *argument = arguments[index];
+        if ([argument isEqualToString:@"--bundle-id"]) {
+            bundleIdentifier = ValueAfter(arguments, index);
+            if (bundleIdentifier == nil) {
+                return Fail(@"--bundle-id requires a value.");
+            }
+            index += 2;
+        } else {
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Unknown pointer-stream argument: %@", argument]
+            );
+        }
+    }
+    if (bundleIdentifier.length == 0) {
+        return Fail(@"pointer-stream requires --bundle-id ID.");
+    }
+
+    char line[512];
+    while (fgets(line, sizeof(line), stdin) != NULL) {
+        @autoreleasepool {
+            NSString *source = [
+                NSString stringWithUTF8String:line
+            ];
+            NSData *data = [source dataUsingEncoding:NSUTF8StringEncoding];
+            NSError *error = nil;
+            id value = data == nil
+                ? nil
+                : [NSJSONSerialization JSONObjectWithData:data
+                                                   options:0
+                                                     error:&error];
+            if (![value isKindOfClass:NSDictionary.class]) {
+                return Fail(
+                    error.localizedDescription
+                    ?: @"pointer-stream received invalid JSON."
+                );
+            }
+            NSDictionary *command = value;
+            NSString *type = command[@"type"];
+            if (![type isKindOfClass:NSString.class]) {
+                return Fail(@"pointer-stream command requires a string type.");
+            }
+
+            if (!ApplicationIsFrontmost(bundleIdentifier)) {
+                continue;
+            }
+            if ([type isEqualToString:@"move"]) {
+                NSNumber *dx = command[@"dx"];
+                NSNumber *dy = command[@"dy"];
+                if (![dx isKindOfClass:NSNumber.class]
+                    || ![dy isKindOfClass:NSNumber.class]
+                    || !isfinite(dx.doubleValue)
+                    || !isfinite(dy.doubleValue)
+                    || fabs(dx.doubleValue) > 250.0
+                    || fabs(dy.doubleValue) > 250.0) {
+                    return Fail(
+                        @"pointer-stream move requires finite dx/dy within 250 points."
+                    );
+                }
+                if (!MovePointer(dx.doubleValue, dy.doubleValue)) {
+                    return Fail(@"macOS could not create a pointer move event.");
+                }
+            } else if ([type isEqualToString:@"click"]) {
+                if (!ClickPointer()) {
+                    return Fail(@"macOS could not create a pointer click.");
+                }
+            } else {
+                return Fail(
+                    [NSString stringWithFormat:
+                        @"Unknown pointer-stream command: %@", type]
+                );
+            }
+        }
+    }
+    return 0;
 }
 
 static void CollectExactMatches(
@@ -2354,6 +2547,7 @@ static void WriteUsage(void) {
         "  macos-control press --bundle-id ID "
             "--role button|menu-item|pop-up-button "
             "--label EXACT [--method ax|mouse|pick] [--confirm]\n"
+        "  macos-control pointer-stream --bundle-id ID\n"
         "  macos-control key --key NAME [--modifiers cmd,shift] "
             "[--hold-ms 20] [--confirm]\n\n"
         "`status` is read-only and never opens the Accessibility permission prompt.\n"
@@ -2442,6 +2636,11 @@ int main(int argc, const char *argv[]) {
         }
         if ([command isEqualToString:@"press"]) {
             return PressControl(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"pointer-stream"]) {
+            return PointerStream(
                 [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
             );
         }
