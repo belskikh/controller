@@ -1,0 +1,96 @@
+{
+  "title": "CONTROL MAPPING",
+  "footer": "Touchpad works as a mouse: swipe to move the pointer, press to click.",
+  "callouts": [
+    {
+      "slot": "left-1",
+      "title": "L2",
+      "description": "Deny"
+    },
+    {
+      "slot": "left-2",
+      "title": "L1",
+      "description": "Toggle recent tasks"
+    },
+    {
+      "slot": "left-3",
+      "title": "CREATE",
+      "description": "New task"
+    },
+    {
+      "slot": "left-4",
+      "title": "D-PAD ↑",
+      "description": "Browse previous task"
+    },
+    {
+      "slot": "left-5",
+      "title": "D-PAD ←",
+      "description": "Cycle permission mode"
+    },
+    {
+      "slot": "left-6",
+      "title": "D-PAD ↓",
+      "description": "Browse next task"
+    },
+    {
+      "slot": "left-7",
+      "title": "D-PAD →",
+      "description": "Dictate / send"
+    },
+    {
+      "slot": "top",
+      "title": "TOUCHPAD",
+      "description": "Move pointer / click"
+    },
+    {
+      "slot": "right-1",
+      "title": "R2",
+      "description": "Allow once"
+    },
+    {
+      "slot": "right-2",
+      "title": "R1",
+      "description": "Allow similar commands"
+    },
+    {
+      "slot": "right-3",
+      "title": "OPTIONS",
+      "description": ""
+    },
+    {
+      "slot": "right-4",
+      "title": "TRIANGLE",
+      "description": "Clear input draft"
+    },
+    {
+      "slot": "right-5",
+      "title": "CIRCLE",
+      "description": "Focus Codex"
+    },
+    {
+      "slot": "right-6",
+      "title": "CROSS",
+      "description": ""
+    },
+    {
+      "slot": "right-7",
+      "title": "SQUARE",
+      "description": "Stop current operation"
+    },
+    {
+      "slot": "bottom-left",
+      "title": "LEFT STICK",
+      "description": "Model Power / mode"
+    },
+    {
+      "slot": "bottom-center",
+      "title": "MUTE",
+      "description": "Cancel dictation"
+    },
+    {
+      "slot": "bottom-right",
+      "title": "RIGHT STICK",
+      "description": ""
+    }
+  ]
+}
