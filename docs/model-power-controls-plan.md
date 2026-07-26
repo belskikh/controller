@@ -15,6 +15,13 @@ Add a modal controller layer behind the currently unassigned DualSense
 Outside this modal layer, every validated v0 binding keeps its current
 behavior.
 
+The current `main` also keeps the touchpad pointer active while this picker is
+open. The first implementation will not pause, stop, or otherwise coordinate
+the pointer stream with picker state. This is an explicit simplicity tradeoff:
+the operator is expected not to swipe or click the touchpad while changing
+Power or speed. If simultaneous use proves problematic on hardware, pointer
+suppression can be added later as a separate fix.
+
 This plan deliberately excludes the `Advanced` picker. In the standard picker,
 `Power` is not a raw reasoning-effort value. Each slider stop is a live,
 catalog-provided bundle of model and reasoning effort. Fast mode is a separate
@@ -157,9 +164,29 @@ modelPower.fast
 modelPower.standard
 ```
 
-Bind only `cross.press` to `modelPower.toggle` in `config.json`. The engine
-reroutes the four existing D-pad presses while picker state is open; their
-normal configured actions remain unchanged outside the modal state.
+Keep `config.version` at `1` and bind only `cross.press` to
+`modelPower.toggle` in `config.json`:
+
+```json
+"cross": {
+  "press": "modelPower.toggle"
+}
+```
+
+No model list, Power-stop list, selected effort, Fast-mode value, or picker
+state belongs in controller configuration. Those values remain owned by the
+live Codex composer.
+
+The first version treats the four modal D-pad meanings as feature behavior,
+not user-configurable bindings. The coordinator reroutes those physical
+controls while picker state is open; their existing configured actions remain
+unchanged outside the modal state. This avoids a config-schema migration for
+one small fixed modal layer. General contextual remapping remains part of the
+separate user-profiles backlog.
+
+No new daemon flag is needed. The existing `--disable-actions` switch covers
+model/Power mutations in the same way that it covers approvals, navigation,
+permission mode, and the touchpad pointer.
 
 ### Engine
 
@@ -188,6 +215,27 @@ tests show that modal routing becomes difficult to reason about.
 - Keep raw accessibility labels and helper JSON parsing below the adapter.
 - Emit structured logs with the requested operation and result, but do not
   persist a catalog or assume that a title maps to a fixed model.
+
+## Validation against current main
+
+Validated against `main` at `0d86ab2` (`Add Codex-gated DualSense touchpad
+pointer`):
+
+| Current-main area | Compatibility result |
+| --- | --- |
+| `config.json` | `Cross` is still unassigned. The new `touchpad.button -> pointer.click` entry remains unchanged; adding the one Cross binding is additive. |
+| Config schema | Version 1 already supports flat physical bindings and needs no structural change. `ACTIONS` and config tests must learn the new semantic action names. |
+| D-pad | All four existing bindings are unchanged, so closed-picker behavior remains the validated baseline. Modal rerouting can be layered on top. |
+| `src/core/engine.ts` | No new main-side state was added. A small picker coordinator can be introduced without merging two competing state machines. |
+| `src/daemon.ts` | The pointer stream added parameters and lifecycle cleanup. Picker dispatch must preserve those arguments and cleanup paths, but there is no action-name collision. |
+| Native helper | `pointer-stream` is a long-running command. Model/Power operations can remain narrow one-shot commands in separate helper processes; no shared native state is required. |
+| Accessibility adapter | Current main did not change composer or model-picker resolution. The previously inspected AX assumptions still apply to the current app build. |
+| Tests | Current main passes TypeScript checking, 19 test files / 70 tests, and the native helper build before model-control work begins. |
+| Documentation | Both touchpad and model-control backlog updates are retained after rebasing the plan branch. |
+
+There are no source-level blockers from current main. The only newly introduced
+interaction is simultaneous touchpad use, and this plan intentionally defers
+special handling for it.
 
 ## Implementation sequence
 
@@ -257,7 +305,7 @@ This gate produces no controller mutation.
 ### Regression
 
 - Approval, interrupt, draft clear, voice, task navigation, permission mode,
-  attention feedback, watchdog, and reconnect tests remain green.
+  pointer, attention feedback, watchdog, and reconnect tests remain green.
 - No USB fallback is introduced.
 - No hard-coded coordinates or fixed model/effort catalog is introduced.
 
@@ -278,6 +326,9 @@ This gate produces no controller mutation.
 | Codex loses focus while picker is open | Local modal state clears; no key is sent elsewhere |
 | Controller reconnects | Picker state is closed and controller starts disabled |
 | Advanced was left open manually | Controller returns to compact view before acting |
+
+Simultaneous touchpad swipe/click while the picker is open is not part of this
+acceptance matrix. The current pointer behavior remains unchanged.
 
 ## Required verification
 
@@ -300,6 +351,8 @@ results.
 - Choosing an exact named reasoning-effort level in `Advanced`.
 - Persisting a hard-coded model or Power catalog.
 - USB controller fallback.
+- Coordinating or suppressing the current touchpad pointer while the picker is
+  open.
 - General pointer control or fixed screen coordinates.
 - App-server ownership or private Electron IPC.
 - Installing or loading the generated launchd agent.
