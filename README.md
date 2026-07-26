@@ -35,6 +35,8 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 
 ## Button map
 
+![DualSense to Codex control map](docs/assets/dualsense-codex-map.png)
+
 | Controller input | Current action |
 | --- | --- |
 | `Circle` | Bring the target application to the front and unlock the remaining controls |
@@ -191,6 +193,15 @@ git diff --check
 When adding or renaming an action, update the action type, config binding,
 daemon dispatcher, adapter, tests, this README, and the validation matrix
 together.
+
+The controller map is assembled locally from a reusable text-free layout with
+Python and [Pillow](https://python-pillow.github.io/). Edit
+[`tools/controller-map/labels.json`](tools/controller-map/labels.json), then
+regenerate the PNG without image generation:
+
+```sh
+npm run docs:controller-map
+```
 
 ### launchd package
 
