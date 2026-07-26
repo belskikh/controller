@@ -97,13 +97,13 @@ export interface ModelPowerCloseResult {
 }
 
 export interface ModelPowerAdjustResult {
-  atBoundary: boolean | number;
+  atBoundary: boolean | number | null;
   bundleIdentifier: string;
-  changed: boolean;
+  changed: boolean | null;
   compactChanged: boolean;
-  currentValue: string;
+  currentValue: string | null;
   direction: "decrease" | "increase";
-  previousValue: string;
+  previousValue: string | null;
   sent: boolean;
 }
 

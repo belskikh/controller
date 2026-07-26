@@ -3,10 +3,9 @@
 A work-in-progress hardware controller for AI applications on macOS. It can
 approve commands, move between tasks, control dictation, stop work, and provide
 attention feedback. While Codex is frontmost, the DualSense touchpad also acts
-as a relative pointing surface. `Cross` opens a compact model control layer for
-changing Codex Power and selecting Standard or Fast mode.
-
-![Current controller map](docs/assets/dualsense-codex-map.png)
+as a relative pointing surface. Pressing the left stick (`L3`) opens a compact
+model control layer for changing Codex Power and selecting Standard or Fast
+mode.
 
 > [!WARNING]
 > **Work in progress:** this project is under active development. Its behavior,
@@ -39,7 +38,7 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 | Controller input | Current action |
 | --- | --- |
 | `Circle` | Bring the target application to the front and unlock the remaining controls |
-| `Cross` | Open or close the compact model picker |
+| `L3` (press left stick) | Open or close the compact model picker |
 | `Create` | Create a new task |
 | `L1` | Toggle between the last two opened tasks |
 | `D-pad up / down` | Move visually through task history |
@@ -54,11 +53,12 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 | Touchpad swipe | Move the mouse pointer |
 | Touchpad press | Left-click at the current pointer location |
 
-While the model picker is open, `D-pad left / right` moves the live Power
-selector one step toward Faster or Smarter, `D-pad up` selects Fast mode, and
-`D-pad down` selects Standard mode. `Circle` closes the picker in this state.
-The controller never enters Advanced model options and does not store a model
-catalog of its own.
+While the model picker is open, moving the left stick left or right moves the
+live Power selector one step toward Faster or Smarter. Moving it up selects
+Fast mode; moving it down selects Standard mode. Pressing `L3` again, or
+pressing `Circle`, closes the picker. Each direction fires once and must return
+near the centre before it can fire again. The controller never enters Advanced
+model options and does not store a model catalog of its own.
 
 Otherwise, D-pad navigation resets the next `L1` press to the previous task,
 keeping the two-task toggle predictable. Unmapped controls are inert.
@@ -223,9 +223,10 @@ For detailed hardware gates and the latest acceptance matrix, see the
 [`validated implementation plan`](docs/implementation-plan.md).
 
 Requested work outside the validated v0 baseline is tracked in the
-[controller backlog](docs/backlog.md). Model/Power control and the general
-touchpad pointer path are implemented with hardware validation pending;
-configurable mapping profiles remain proposed.
+[controller backlog](docs/backlog.md). Model/Power control is implemented and
+validated on the paired controller; the general touchpad pointer path is
+implemented with hardware validation pending, and configurable mapping
+profiles remain proposed.
 
 ## Acknowledgments
 

@@ -558,7 +558,7 @@ describe("CodexAccessibilityAdapter", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("fails closed when the active composer model trigger is ambiguous", async () => {
+  it("fails closed when the model shortcut does not open the picker", async () => {
     const client = new FakeControlClient();
     client.openModelPower = async (
       bundleIdentifier,
@@ -575,7 +575,7 @@ describe("CodexAccessibilityAdapter", () => {
 
     await expect(
       new CodexAccessibilityAdapter(client, true).openModelPower(),
-    ).rejects.toThrow(/exactly one model control/);
+    ).rejects.toThrow(/did not open/);
   });
 
   it("closes the compact model picker idempotently", async () => {

@@ -12,7 +12,10 @@ import {
   disconnectHID,
   type BluetoothHIDConnection,
 } from "./dualsense/bluetooth.js";
-import { subscribeButtonEvents } from "./dualsense/input-events.js";
+import {
+  subscribeButtonEvents,
+  subscribeLeftStickDirections,
+} from "./dualsense/input-events.js";
 import { subscribeTouchpadPointer } from "./dualsense/touchpad-pointer.js";
 import { BluetoothDualSenseOutput } from "./dualsense/output.js";
 import { DualSenseFeedbackPolicy } from "./dualsense/feedback.js";
@@ -138,6 +141,7 @@ async function runConnectedSession(
   let work = Promise.resolve();
   let acceptingInput = true;
   let unsubscribeInput = (): void => {};
+  let unsubscribeLeftStick = (): void => {};
   let unsubscribePointer = (): void => {};
   const frontmostMonitor = new MacOSFrontmostMonitor(
     options.macOSHelperPath,
@@ -280,6 +284,10 @@ async function runConnectedSession(
       );
     }
     unsubscribeInput = subscribeButtonEvents(connection.hid, enqueueEvent);
+    unsubscribeLeftStick = subscribeLeftStickDirections(
+      connection.hid,
+      enqueueEvent,
+    );
     emit("ready", {
       actionsEnabled: options.enableActions,
       configPath: options.configPath,
@@ -293,6 +301,7 @@ async function runConnectedSession(
     frontmostMonitor.stop();
     attentionMonitor.stop();
     unsubscribeInput();
+    unsubscribeLeftStick();
     unsubscribePointer();
     pointer.stop();
     await work.catch(() => {});

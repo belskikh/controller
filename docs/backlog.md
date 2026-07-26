@@ -13,44 +13,44 @@ This backlog records requested work that is not part of the validated v0 baselin
 
 **Done when:** dictation started from the controller records through its microphone while Codex is frontmost, and no laptop-microphone audio is captured or system-wide input setting is changed.
 
-## Composer model and thinking-effort control — implemented; hardware validation pending
+## Composer model and thinking-effort control — implemented and validated
 
-**Goal:** bind the currently unassigned `Cross` button to a modal controller
-layer for Codex's compact, standard model picker. Use the live `Power` slider
-for model/reasoning bundles and allow idempotent selection of Standard or Fast
+**Goal:** bind the left-stick press (`L3`) to a modal controller layer for
+Codex's compact, standard model picker. Use the live `Power` slider for
+model/reasoning bundles and allow idempotent selection of Standard or Fast
 mode. Do not enter or control `Advanced`. `Triangle` keeps its validated
 draft-clear action.
 
-- `Cross` opens/closes the compact picker; while it is open, D-pad left/right
-  adjusts Power, D-pad up selects Fast, and D-pad down selects Standard.
-- Resolve the live composer, compact picker, Power control, and Fast-mode item
-  through Accessibility on every press. Do not use saved screen positions or a
-  fixed model/effort catalog.
+- `L3` opens/closes the compact picker; while it is open, left-stick
+  left/right adjusts Power, up selects Fast, and down selects Standard.
+- Open the compact picker through Codex's `Control+Shift+M` shortcut. Focus its
+  keyboard Power control with `Home`, then send exactly one arrow. Resolve only
+  the Fast-mode item through Accessibility; do not use saved screen positions
+  or a fixed model/effort catalog.
 - Fail closed if a unique control is unavailable; reset modal state on task
   navigation, focus loss, disconnect, adapter error, and shutdown.
-- Expose the `Cross` binding in `config.json`; test modal routing, slider
+- Expose the `L3` binding in `config.json`; test modal routing, slider
   endpoints, idempotent speed selection, unavailable controls, and every reset
   path.
 
-The compact picker is now resolved from the single live editable composer and
-its nearby enabled pop-up button. `Cross` enters the modal layer only after the
-opened compact picker is verified. The four D-pad directions are rerouted
-while that layer is active, and the state resets on focus loss, adapter error,
-disconnect, and shutdown. There is no model/effort catalog or Advanced-mode
-path in the daemon.
+`L3` now sends Codex's native compact-picker shortcut. The four left-stick
+directions are rerouted while that layer is active, and the state resets on
+focus loss, adapter error, disconnect, and shutdown. There is no model/effort
+catalog or Advanced-mode path in the daemon.
 
 Automated coverage verifies modal routing, open acknowledgement, reset paths,
 one-step Power dispatch, endpoints, idempotent speed selection, and dry-run
-behavior. The native helper has also been exercised against the current Codex
-UI for inspection and open/close. The full Bluetooth controller path remains
-to be validated.
+behavior. The paired Bluetooth controller has exercised `L3`, all four stick
+directions, Power changes, Fast/Standard selection, and close. Full-tree AX
+polling discovered during that run was removed from open, close, and Power
+adjustment. Fast/Standard keeps one bounded live-menu lookup for idempotence.
 
 The detailed design, implementation sequence, and validation matrix are in
 [`model-power-controls-plan.md`](model-power-controls-plan.md).
 
-**Hardware validation is complete when:** a paired Bluetooth controller changes only the currently visible
-Codex compact composer selector, never enters Advanced or changes a setting
-outside Codex, and emits a dry-run trace before mutations are enabled.
+The paired controller changes only the currently visible compact composer
+selector, never enters Advanced, and keeps left-stick gestures inert while the
+picker is closed.
 
 ## DualSense touchpad as a pointing surface — implemented; hardware validation pending
 

@@ -160,22 +160,23 @@ the full Bluetooth path still require validation on the paired controller.
 
 ### M7 — compact model Power control
 
-1. Resolve the model trigger relative to the single live editable composer,
-   using only current Accessibility frames and requiring one unique candidate.
-2. Open the picker and normalize an existing Advanced view back to Compact
-   before exposing controller actions.
-3. Map `Cross` to a modal layer: left/right changes Power one step, up selects
-   Fast, down selects Standard, and `Cross` or `Circle` closes.
-4. Acknowledge a verified open result before entering modal routing. Consume a
-   stale modal press and reset on adapter failure rather than leaking the
-   underlying D-pad action.
+1. Open the standard picker through Codex's native `Control+Shift+M` shortcut;
+   close it with `Escape`.
+2. Focus the hidden Power control with `Home`, then send exactly one Left or
+   Right key without resolving the composer or scanning the AX tree.
+3. Map left-stick press (`L3`) to a modal layer: left/right changes Power one
+   step, up selects Fast, down selects Standard, and `L3` or `Circle` closes.
+4. Enter modal routing after the shortcut is sent successfully. Keep the
+   frontmost-Codex gate fail-closed before every key or menu action.
 5. Reset local picker state without sending UI input after focus loss,
    disconnect, watchdog failure, adapter error, or shutdown.
 
-The native helper inspection and open/close path have been exercised against
-the current Codex compact picker. TypeScript and native builds plus automated
-routing/adapter tests pass. One-step Power changes, Fast/Standard selection,
-and the complete paired Bluetooth path still require hardware validation.
+The native helper and complete paired Bluetooth path have been exercised
+against the current Codex compact picker. `L3`, one-step Power changes,
+Fast/Standard selection, and close all passed. Hardware testing also exposed
+and removed repeated full-tree AX polling that caused multi-second latency.
+Opening, closing, and Power adjustment now use only keyboard events;
+Fast/Standard retains one bounded live-menu lookup.
 
 ## Final Bluetooth acceptance matrix
 
@@ -189,9 +190,9 @@ and the complete paired Bluetooth path still require hardware validation.
 | Circle | Activate Codex globally | Passed |
 | Create | New chat | Passed |
 | Triangle | Clear input draft | Passed |
-| Cross | Open/close compact model picker | Automated + native UI open/close; hardware pending |
-| D-pad left/right while picker is open | Move live Power one step | Automated; hardware pending |
-| D-pad up/down while picker is open | Select Fast/Standard | Automated; hardware pending |
+| L3 | Open/close compact model picker | Passed |
+| Left stick left/right while picker is open | Move live Power one step | Passed |
+| Left stick up/down while picker is open | Select Fast/Standard | Passed |
 | D-pad up/down | Next/previous task | Passed |
 | D-pad left | Cycle permission mode | Automated; hardware pending |
 | D-pad right | Dictate / transcribe and send | Passed |

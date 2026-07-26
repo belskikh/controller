@@ -4,7 +4,10 @@ import {
   InputId,
   type DualsenseHIDState,
 } from "dualsense-ts";
-import { diffButtonEvents } from "./input-events.js";
+import {
+  diffButtonEvents,
+  LeftStickDirectionTracker,
+} from "./input-events.js";
 
 describe("diffButtonEvents", () => {
   it("normalizes button transitions", () => {
@@ -28,5 +31,42 @@ describe("diffButtonEvents", () => {
         { ...DefaultDualsenseHIDState },
       ),
     ).toEqual([]);
+  });
+
+  it("emits each left-stick direction once until the stick returns to centre", () => {
+    const tracker = new LeftStickDirectionTracker();
+    const state = (overrides: Partial<DualsenseHIDState>): DualsenseHIDState => ({
+      ...DefaultDualsenseHIDState,
+      ...overrides,
+    });
+
+    expect(tracker.update(state({ [InputId.LeftAnalogX]: -0.8 }))).toEqual({
+      control: "left.stick.left",
+      phase: "press",
+    });
+    expect(tracker.update(state({ [InputId.LeftAnalogX]: -1 }))).toBeUndefined();
+    expect(tracker.update(state({ [InputId.LeftAnalogX]: 0 }))).toBeUndefined();
+    expect(tracker.update(state({ [InputId.LeftAnalogX]: -0.8 }))).toEqual({
+      control: "left.stick.left",
+      phase: "press",
+    });
+  });
+
+  it("uses the dominant left-stick axis and maps positive Y to up", () => {
+    const tracker = new LeftStickDirectionTracker();
+    const state = (overrides: Partial<DualsenseHIDState>): DualsenseHIDState => ({
+      ...DefaultDualsenseHIDState,
+      ...overrides,
+    });
+
+    expect(tracker.update(state({ [InputId.LeftAnalogY]: 0.8 }))).toEqual({
+      control: "left.stick.up",
+      phase: "press",
+    });
+    tracker.update(state({}));
+    expect(tracker.update(state({ [InputId.LeftAnalogY]: -0.8 }))).toEqual({
+      control: "left.stick.down",
+      phase: "press",
+    });
   });
 });

@@ -108,11 +108,6 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
       CODEX_BUNDLE_IDENTIFIER,
       this.mutationsEnabled,
     );
-    if (result.triggerMatched !== 1) {
-      throw new CodexAccessibilityError(
-        "Expected exactly one model control in the active composer.",
-      );
-    }
     const active = Boolean(result.open) && result.compact;
     if (this.mutationsEnabled && !active) {
       throw new CodexAccessibilityError(
@@ -149,15 +144,6 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
     if (result.sent !== this.mutationsEnabled) {
       throw new CodexAccessibilityError(
         "Unexpected model Power adjustment result.",
-      );
-    }
-    if (
-      this.mutationsEnabled
-      && !result.changed
-      && !Boolean(result.atBoundary)
-    ) {
-      throw new CodexAccessibilityError(
-        "Model Power did not change and was not at an endpoint.",
       );
     }
   }

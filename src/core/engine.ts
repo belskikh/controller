@@ -105,15 +105,15 @@ export class ControllerEngine {
     action: Action | undefined,
   ): readonly EngineOutput[] {
     switch (control) {
-      case "dpad.left":
+      case "left.stick.left":
         return this.dispatch("modelPower.decrease");
-      case "dpad.right":
+      case "left.stick.right":
         return this.dispatch("modelPower.increase");
-      case "dpad.up":
+      case "left.stick.up":
         return this.dispatch("modelPower.fast");
-      case "dpad.down":
+      case "left.stick.down":
         return this.dispatch("modelPower.standard");
-      case "cross":
+      case "left.stick.button":
       case "circle":
         this.modelPowerOpen = false;
         return this.dispatch("modelPower.close");
@@ -143,10 +143,10 @@ export class ControllerEngine {
 }
 
 function isModelPowerControl(control: string): boolean {
-  return control === "cross"
+  return control === "left.stick.button"
     || control === "circle"
-    || control === "dpad.left"
-    || control === "dpad.right"
-    || control === "dpad.up"
-    || control === "dpad.down";
+    || control === "left.stick.left"
+    || control === "left.stick.right"
+    || control === "left.stick.up"
+    || control === "left.stick.down";
 }
