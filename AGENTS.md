@@ -5,6 +5,11 @@ applications on macOS. The only supported integration today is Bluetooth-only
 DualSense control for Codex Desktop. Version `v0` has been validated on the
 paired controller and should be treated as the working baseline.
 
+## Development workflow
+
+- By default, all changes and new features must be developed in a dedicated
+  Git worktree, not on `main` and not in the currently checked-out branch.
+
 ## Safety and scope
 
 - Support Bluetooth only. Do not add USB fallback behavior.
