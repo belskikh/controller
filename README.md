@@ -5,7 +5,7 @@ approve commands, move between tasks, control dictation, stop work, and provide
 attention feedback. While Codex is frontmost, the DualSense touchpad also acts
 as a relative pointing surface.
 
-![Current controller map](docs/assets/dualsense-codex-map.png)
+![Controller mapping; the touchpad moves and clicks the mouse pointer](docs/assets/dualsense-codex-map.png)
 
 > [!WARNING]
 > **Work in progress:** this project is under active development. Its behavior,
