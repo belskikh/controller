@@ -12,7 +12,10 @@ import {
   disconnectHID,
   type BluetoothHIDConnection,
 } from "./dualsense/bluetooth.js";
-import { subscribeButtonEvents } from "./dualsense/input-events.js";
+import {
+  subscribeButtonEvents,
+  subscribeLeftStickDirections,
+} from "./dualsense/input-events.js";
 import { subscribeTouchpadPointer } from "./dualsense/touchpad-pointer.js";
 import { BluetoothDualSenseOutput } from "./dualsense/output.js";
 import { DualSenseFeedbackPolicy } from "./dualsense/feedback.js";
@@ -138,6 +141,7 @@ async function runConnectedSession(
   let work = Promise.resolve();
   let acceptingInput = true;
   let unsubscribeInput = (): void => {};
+  let unsubscribeLeftStick = (): void => {};
   let unsubscribePointer = (): void => {};
   const frontmostMonitor = new MacOSFrontmostMonitor(
     options.macOSHelperPath,
@@ -151,7 +155,7 @@ async function runConnectedSession(
 
   const applyAvailability = async (codexFrontmost: boolean): Promise<void> => {
     for (const output of engine.synchronizeEnabled(codexFrontmost)) {
-      await handleEngineOutput(
+      const modelPowerOpen = await handleEngineOutput(
         output,
         codex,
         voice,
@@ -160,6 +164,9 @@ async function runConnectedSession(
         options.enableActions,
         options.enableVoice,
       );
+      if (modelPowerOpen !== undefined) {
+        engine.synchronizeModelPower(modelPowerOpen);
+      }
     }
   };
   const synchronizeAvailability = async (): Promise<void> => {
@@ -176,6 +183,7 @@ async function runConnectedSession(
         }
       })
       .catch(async (error: unknown) => {
+        engine.resetModelPower();
         emitError(error);
         await feedback.showError().catch(() => {});
       });
@@ -196,7 +204,7 @@ async function runConnectedSession(
           await synchronizeAvailability();
         }
         for (const output of engine.handle(event)) {
-          await handleEngineOutput(
+          const modelPowerOpen = await handleEngineOutput(
             output,
             codex,
             voice,
@@ -205,12 +213,16 @@ async function runConnectedSession(
             options.enableActions,
             options.enableVoice,
           );
+          if (modelPowerOpen !== undefined) {
+            engine.synchronizeModelPower(modelPowerOpen);
+          }
         }
         if (action === "focusCodex") {
           await synchronizeAvailability();
         }
       })
       .catch(async (error: unknown) => {
+        engine.resetModelPower();
         emitError(error);
         await feedback.showError().catch(() => {});
       });
@@ -272,6 +284,10 @@ async function runConnectedSession(
       );
     }
     unsubscribeInput = subscribeButtonEvents(connection.hid, enqueueEvent);
+    unsubscribeLeftStick = subscribeLeftStickDirections(
+      connection.hid,
+      enqueueEvent,
+    );
     emit("ready", {
       actionsEnabled: options.enableActions,
       configPath: options.configPath,
@@ -285,6 +301,7 @@ async function runConnectedSession(
     frontmostMonitor.stop();
     attentionMonitor.stop();
     unsubscribeInput();
+    unsubscribeLeftStick();
     unsubscribePointer();
     pointer.stop();
     await work.catch(() => {});
@@ -314,7 +331,7 @@ async function handleEngineOutput(
   feedback: DualSenseFeedbackPolicy,
   actionsEnabled: boolean,
   voiceEnabled: boolean,
-): Promise<void> {
+): Promise<boolean | undefined> {
   if (output.type === "ignored") {
     emit("ignored", { reason: output.reason });
     return;
@@ -345,6 +362,28 @@ async function handleEngineOutput(
     case "interrupt":
       await codex.interrupt();
       break;
+    case "modelPower.decrease":
+      await codex.adjustModelPower(-1);
+      break;
+    case "modelPower.increase":
+      await codex.adjustModelPower(1);
+      break;
+    case "modelPower.close":
+      await codex.closeModelPower();
+      break;
+    case "modelPower.open": {
+      const open = await codex.openModelPower();
+      emit("action", { action: output.action, phase: "completed" });
+      return open;
+    }
+    case "modelPower.fast":
+      await codex.setModelPowerSpeed("fast");
+      break;
+    case "modelPower.standard":
+      await codex.setModelPowerSpeed("standard");
+      break;
+    case "modelPower.toggle":
+      throw new Error("modelPower.toggle must be resolved by ControllerEngine.");
     case "newThread":
       await codex.newThread();
       break;

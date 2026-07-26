@@ -13,6 +13,11 @@ import type {
   ControlStatus,
   CyclePermissionModeResult,
   MatchResult,
+  ModelPowerAdjustResult,
+  ModelPowerCloseResult,
+  ModelPowerInspectResult,
+  ModelPowerOpenResult,
+  ModelPowerSpeedResult,
   PreviousChatResult,
   PressResult,
   SendKeyResult,
@@ -114,6 +119,83 @@ class FakeControlClient implements ControlClient {
       currentMode: "Ask for approval",
       selected: confirm,
       targetMode: null,
+    };
+  }
+
+  async inspectModelPower(
+    bundleIdentifier: string,
+  ): Promise<ModelPowerInspectResult> {
+    return {
+      bundleIdentifier,
+      compact: false,
+      open: 0,
+      powerMatched: 0,
+      speedMode: null,
+      triggerError: null,
+      triggerLabel: null,
+      triggerMatched: 0,
+      view: "closed",
+    };
+  }
+
+  async openModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerOpenResult> {
+    return {
+      alreadyOpen: false,
+      bundleIdentifier,
+      compact: confirm,
+      compactChanged: false,
+      open: confirm ? 1 : 0,
+      opened: confirm,
+      triggerLabel: null,
+      triggerMatched: 1,
+    };
+  }
+
+  async closeModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerCloseResult> {
+    return {
+      alreadyClosed: !confirm,
+      bundleIdentifier,
+      closed: confirm,
+      open: confirm ? 0 : 1,
+    };
+  }
+
+  async adjustModelPower(
+    bundleIdentifier: string,
+    direction: "decrease" | "increase",
+    confirm: boolean,
+  ): Promise<ModelPowerAdjustResult> {
+    return {
+      atBoundary: false,
+      bundleIdentifier,
+      changed: confirm,
+      compactChanged: false,
+      currentValue: "",
+      direction,
+      previousValue: "",
+      sent: confirm,
+    };
+  }
+
+  async setModelPowerSpeed(
+    bundleIdentifier: string,
+    mode: "standard" | "fast",
+    confirm: boolean,
+  ): Promise<ModelPowerSpeedResult> {
+    return {
+      alreadySelected: !confirm,
+      bundleIdentifier,
+      changed: confirm,
+      compactChanged: false,
+      currentMode: mode,
+      selected: confirm,
+      targetMode: mode,
     };
   }
 

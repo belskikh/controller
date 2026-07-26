@@ -41,6 +41,7 @@ static NSDictionary<NSString *, NSNumber *> *KeyCodes(void) {
         @"\\": @42, @",": @43, @"/": @44, @"n": @45, @"m": @46,
         @".": @47, @"tab": @48, @"space": @49, @"`": @50,
         @"delete": @51, @"backspace": @51, @"escape": @53, @"esc": @53,
+        @"home": @115,
         @"left": @123, @"right": @124, @"down": @125, @"up": @126,
     };
 }
@@ -1142,6 +1143,641 @@ static int ClearInput(NSArray<NSString *> *arguments) {
         },
         stdout
     );
+    return 0;
+}
+
+static void CollectModelPowerElements(
+    AXUIElementRef element,
+    NSUInteger depth,
+    NSUInteger maxDepth,
+    NSMutableArray *inputs,
+    NSMutableArray<NSDictionary *> *popups
+) {
+    if (depth > maxDepth || inputs.count > 1 || popups.count >= 100) {
+        return;
+    }
+
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    id enabled = CopyAttribute(element, kAXEnabledAttribute);
+    BOOL isEnabled = [enabled isKindOfClass:NSNumber.class]
+        && [enabled boolValue];
+    if (isEnabled
+        && [role isEqualToString:(__bridge NSString *)kAXTextAreaRole]) {
+        Boolean valueIsSettable = false;
+        AXError result = AXUIElementIsAttributeSettable(
+            element,
+            kAXValueAttribute,
+            &valueIsSettable
+        );
+        if (result == kAXErrorSuccess && valueIsSettable) {
+            [inputs addObject:(__bridge id)element];
+        }
+    } else if (
+        isEnabled
+        && [role isEqualToString:(__bridge NSString *)kAXPopUpButtonRole]
+    ) {
+        NSDictionary *position = PointAttribute(
+            element,
+            kAXPositionAttribute
+        );
+        NSDictionary *size = SizeAttribute(element, kAXSizeAttribute);
+        if (position != nil
+            && size != nil
+            && [size[@"width"] doubleValue] > 0
+            && [size[@"height"] doubleValue] > 0) {
+            [popups addObject:@{
+                @"element": (__bridge id)element,
+                @"label": ControlLabel(element) ?: @"",
+                @"position": position,
+                @"size": size,
+            }];
+        }
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectModelPowerElements(
+            (__bridge AXUIElementRef)child,
+            depth + 1,
+            maxDepth,
+            inputs,
+            popups
+        );
+    }
+}
+
+static NSDictionary *ResolveModelPowerTrigger(
+    AXUIElementRef focusedWindow,
+    NSString **errorMessage
+) {
+    NSMutableArray *inputs = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *popups = [NSMutableArray array];
+    CollectModelPowerElements(
+        focusedWindow,
+        0,
+        30,
+        inputs,
+        popups
+    );
+    if (inputs.count != 1) {
+        *errorMessage = [NSString stringWithFormat:
+            @"Expected exactly one enabled editable composer; found %lu.",
+            (unsigned long)inputs.count
+        ];
+        return nil;
+    }
+
+    AXUIElementRef input = (__bridge AXUIElementRef)inputs.firstObject;
+    NSDictionary *inputPosition = PointAttribute(
+        input,
+        kAXPositionAttribute
+    );
+    NSDictionary *inputSize = SizeAttribute(input, kAXSizeAttribute);
+    if (inputPosition == nil
+        || inputSize == nil
+        || [inputSize[@"width"] doubleValue] <= 0
+        || [inputSize[@"height"] doubleValue] <= 0) {
+        *errorMessage = @"The active composer has no valid Accessibility frame.";
+        return nil;
+    }
+
+    double inputX = [inputPosition[@"x"] doubleValue];
+    double inputY = [inputPosition[@"y"] doubleValue];
+    double inputWidth = [inputSize[@"width"] doubleValue];
+    double inputHeight = [inputSize[@"height"] doubleValue];
+    double inputCenterX = inputX + inputWidth / 2.0;
+    double inputMaxY = inputY + inputHeight;
+
+    NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
+    for (NSDictionary *popup in popups) {
+        NSDictionary *position = popup[@"position"];
+        NSDictionary *size = popup[@"size"];
+        double centerX = [position[@"x"] doubleValue]
+            + [size[@"width"] doubleValue] / 2.0;
+        double centerY = [position[@"y"] doubleValue]
+            + [size[@"height"] doubleValue] / 2.0;
+        if (centerX > inputCenterX
+            && centerY >= inputY
+            && centerY <= inputMaxY + inputHeight) {
+            [candidates addObject:popup];
+        }
+    }
+    if (candidates.count != 1) {
+        *errorMessage = [NSString stringWithFormat:
+            @"Expected exactly one model control in the active composer; "
+            @"found %lu among %lu enabled pop-up buttons.",
+            (unsigned long)candidates.count,
+            (unsigned long)popups.count
+        ];
+        return nil;
+    }
+    NSDictionary *candidate = candidates.firstObject;
+    if ([candidate[@"label"] length] == 0) {
+        *errorMessage = @"The active composer model control has no label.";
+        return nil;
+    }
+    return candidate;
+}
+
+static NSArray<NSString *> *ModelPowerMenuLabels(void) {
+    return @[
+        @"Power",
+        @"Show advanced options",
+        @"Show compact options",
+        @"Enable fast mode",
+        @"Enable standard mode",
+    ];
+}
+
+static void CollectModelPowerMenuItems(
+    AXUIElementRef element,
+    NSUInteger depth,
+    NSUInteger maxDepth,
+    NSMutableDictionary<NSString *, NSMutableArray *> *matches
+) {
+    if (depth > maxDepth) {
+        return;
+    }
+
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    if ([role isEqualToString:(__bridge NSString *)kAXMenuItemRole]) {
+        id enabled = CopyAttribute(element, kAXEnabledAttribute);
+        if ([enabled isKindOfClass:NSNumber.class] && [enabled boolValue]) {
+            NSString *label = ControlLabel(element);
+            NSMutableArray *labelMatches = matches[label];
+            if (labelMatches != nil) {
+                [labelMatches addObject:(__bridge id)element];
+            }
+        }
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectModelPowerMenuItems(
+            (__bridge AXUIElementRef)child,
+            depth + 1,
+            maxDepth,
+            matches
+        );
+    }
+}
+
+static NSDictionary<NSString *, NSArray *> *ModelPowerMenuSnapshot(
+    AXUIElementRef application
+) {
+    NSMutableDictionary<NSString *, NSMutableArray *> *matches =
+        [NSMutableDictionary dictionary];
+    for (NSString *label in ModelPowerMenuLabels()) {
+        matches[label] = [NSMutableArray array];
+    }
+    CollectModelPowerMenuItems(application, 0, 40, matches);
+    return matches;
+}
+
+static NSString *ModelPowerViewFromSnapshot(
+    NSDictionary<NSString *, NSArray *> *snapshot
+) {
+    NSUInteger compactCount = [snapshot[@"Show advanced options"] count];
+    NSUInteger advancedCount = [snapshot[@"Show compact options"] count];
+    if (compactCount == 1 && advancedCount == 0) {
+        return @"compact";
+    }
+    if (compactCount == 0 && advancedCount == 1) {
+        return @"advanced";
+    }
+    return @"closed";
+}
+
+static NSString *ModelPowerSpeedModeFromSnapshot(
+    NSDictionary<NSString *, NSArray *> *snapshot
+) {
+    NSUInteger enableFastCount = [snapshot[@"Enable fast mode"] count];
+    NSUInteger enableStandardCount = [
+        snapshot[@"Enable standard mode"] count
+    ];
+    if (enableFastCount == 1 && enableStandardCount == 0) {
+        return @"standard";
+    }
+    if (enableFastCount == 0 && enableStandardCount == 1) {
+        return @"fast";
+    }
+    return nil;
+}
+
+static BOOL PostKeyCode(CGKeyCode keyCode, CGEventFlags flags) {
+    CGEventRef down = CGEventCreateKeyboardEvent(
+        nil,
+        keyCode,
+        true
+    );
+    CGEventRef up = CGEventCreateKeyboardEvent(
+        nil,
+        keyCode,
+        false
+    );
+    if (down == nil || up == nil) {
+        if (down != nil) CFRelease(down);
+        if (up != nil) CFRelease(up);
+        return NO;
+    }
+    CGEventSetFlags(down, flags);
+    CGEventSetFlags(up, flags);
+    CGEventPost(kCGHIDEventTap, down);
+    [NSThread sleepForTimeInterval:0.02];
+    CGEventPost(kCGHIDEventTap, up);
+    CFRelease(down);
+    CFRelease(up);
+    return YES;
+}
+
+static BOOL PostKeyName(NSString *keyName) {
+    NSNumber *keyCode = KeyCodes()[keyName.lowercaseString ?: @""];
+    return keyCode != nil
+        && PostKeyCode((CGKeyCode)keyCode.unsignedShortValue, 0);
+}
+
+static BOOL PostModelPowerShortcut(void) {
+    NSNumber *keyCode = KeyCodes()[@"m"];
+    return keyCode != nil
+        && PostKeyCode(
+            (CGKeyCode)keyCode.unsignedShortValue,
+            kCGEventFlagMaskControl | kCGEventFlagMaskShift
+        );
+}
+
+static NSString *ModelPowerView(AXUIElementRef application) {
+    return ModelPowerViewFromSnapshot(
+        ModelPowerMenuSnapshot(application)
+    );
+}
+
+static BOOL WaitForModelPowerView(
+    AXUIElementRef application,
+    NSString *expectedView
+) {
+    for (NSUInteger attempt = 0; attempt < 20; attempt += 1) {
+        if ([ModelPowerView(application) isEqualToString:expectedView]) {
+            return YES;
+        }
+        usleep(50000);
+    }
+    return NO;
+}
+
+static BOOL EnsureCompactModelPowerView(
+    AXUIElementRef application,
+    NSString *bundleIdentifier,
+    BOOL confirmed,
+    BOOL *changed,
+    NSDictionary<NSString *, NSArray *> **snapshotOut,
+    NSString **errorMessage
+) {
+    NSDictionary<NSString *, NSArray *> *snapshot =
+        ModelPowerMenuSnapshot(application);
+    NSString *view = ModelPowerViewFromSnapshot(snapshot);
+    if ([view isEqualToString:@"compact"]) {
+        if (snapshotOut != NULL) {
+            *snapshotOut = snapshot;
+        }
+        return YES;
+    }
+    if (![view isEqualToString:@"advanced"]) {
+        *errorMessage = @"The model picker is not open.";
+        return NO;
+    }
+    if (!confirmed) {
+        *errorMessage = @"The model picker is open in Advanced view.";
+        return NO;
+    }
+    NSArray *matches = snapshot[@"Show compact options"];
+    if (matches.count != 1 || !ApplicationIsFrontmost(bundleIdentifier)) {
+        *errorMessage =
+            @"Advanced model picker could not be returned to compact view.";
+        return NO;
+    }
+    if (!ClickElementCenter((__bridge AXUIElementRef)matches.firstObject)) {
+        *errorMessage = @"Compact-view control has an invalid live frame.";
+        return NO;
+    }
+    if (!WaitForModelPowerView(application, @"compact")) {
+        *errorMessage =
+            @"The model picker did not switch back to compact view.";
+        return NO;
+    }
+    *changed = YES;
+    if (snapshotOut != NULL) {
+        *snapshotOut = ModelPowerMenuSnapshot(application);
+    }
+    return YES;
+}
+
+static NSDictionary *ModelPowerInspection(
+    AXUIElementRef application,
+    AXUIElementRef focusedWindow
+) {
+    NSString *triggerError = nil;
+    NSDictionary *trigger = ResolveModelPowerTrigger(
+        focusedWindow,
+        &triggerError
+    );
+    NSDictionary<NSString *, NSArray *> *snapshot =
+        ModelPowerMenuSnapshot(application);
+    NSString *view = ModelPowerViewFromSnapshot(snapshot);
+    NSString *speedMode = ModelPowerSpeedModeFromSnapshot(snapshot);
+    NSArray *powerMatches = snapshot[@"Power"];
+    return @{
+        @"compact": @([view isEqualToString:@"compact"]),
+        @"open": @(![view isEqualToString:@"closed"]),
+        @"powerMatched": @(powerMatches.count),
+        @"speedMode": speedMode ?: NSNull.null,
+        @"triggerLabel": trigger == nil
+            ? NSNull.null
+            : trigger[@"label"],
+        @"triggerMatched": @(trigger == nil ? 0 : 1),
+        @"triggerError": triggerError ?: NSNull.null,
+        @"view": view,
+    };
+}
+
+static int ModelPower(NSArray<NSString *> *arguments) {
+    if (!AXIsProcessTrusted()) {
+        return Fail(@"Accessibility permission is not granted to macos-control.");
+    }
+    NSString *operation = arguments.firstObject;
+    NSString *bundleIdentifier = nil;
+    NSString *direction = nil;
+    NSString *mode = nil;
+    BOOL confirmed = NO;
+    for (NSUInteger index = 1; index < arguments.count;) {
+        NSString *argument = arguments[index];
+        if ([argument isEqualToString:@"--bundle-id"]) {
+            bundleIdentifier = ValueAfter(arguments, index);
+            if (bundleIdentifier == nil) {
+                return Fail(@"--bundle-id requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--direction"]) {
+            direction = ValueAfter(arguments, index);
+            if (direction == nil) {
+                return Fail(@"--direction requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--mode"]) {
+            mode = ValueAfter(arguments, index);
+            if (mode == nil) {
+                return Fail(@"--mode requires a value.");
+            }
+            index += 2;
+        } else if ([argument isEqualToString:@"--confirm"]) {
+            confirmed = YES;
+            index += 1;
+        } else {
+            return Fail(
+                [NSString stringWithFormat:
+                    @"Unknown model-power argument: %@", argument]
+            );
+        }
+    }
+    if (operation.length == 0 || bundleIdentifier.length == 0) {
+        return Fail(@"model-power requires an operation and --bundle-id.");
+    }
+    if (![operation isEqualToString:@"inspect"]
+        && ![operation isEqualToString:@"open"]
+        && ![operation isEqualToString:@"close"]
+        && ![operation isEqualToString:@"adjust"]
+        && ![operation isEqualToString:@"speed"]) {
+        return Fail(@"model-power operation must be inspect, open, close, adjust, or speed.");
+    }
+    if ([operation isEqualToString:@"adjust"]
+        && ![direction isEqualToString:@"decrease"]
+        && ![direction isEqualToString:@"increase"]) {
+        return Fail(@"model-power adjust requires --direction decrease|increase.");
+    }
+    if ([operation isEqualToString:@"speed"]
+        && ![mode isEqualToString:@"standard"]
+        && ![mode isEqualToString:@"fast"]) {
+        return Fail(@"model-power speed requires --mode standard|fast.");
+    }
+
+    NSArray<NSRunningApplication *> *applications =
+        [NSRunningApplication
+            runningApplicationsWithBundleIdentifier:bundleIdentifier];
+    if (applications.count != 1) {
+        return Fail(
+            [NSString stringWithFormat:
+                @"Expected exactly one running %@ application; found %lu.",
+                bundleIdentifier,
+                (unsigned long)applications.count]
+        );
+    }
+    if (!ApplicationIsFrontmost(bundleIdentifier)) {
+        return Fail(
+            @"Refusing to inspect or control the model picker because Codex is not frontmost."
+        );
+    }
+    AXUIElementRef application = AXUIElementCreateApplication(
+        applications.firstObject.processIdentifier
+    );
+    id focusedWindowValue = CopyAttribute(
+        application,
+        kAXFocusedWindowAttribute
+    );
+    if (focusedWindowValue == nil
+        || CFGetTypeID((__bridge CFTypeRef)focusedWindowValue)
+            != AXUIElementGetTypeID()) {
+        CFRelease(application);
+        return Fail(@"Could not resolve the focused application window.");
+    }
+    AXUIElementRef focusedWindow =
+        (__bridge AXUIElementRef)focusedWindowValue;
+
+    if ([operation isEqualToString:@"inspect"]) {
+        NSMutableDictionary *payload = [
+            ModelPowerInspection(application, focusedWindow) mutableCopy
+        ];
+        payload[@"bundleIdentifier"] = bundleIdentifier;
+        WriteJSON(payload, stdout);
+        CFRelease(application);
+        return 0;
+    }
+
+    if ([operation isEqualToString:@"open"]) {
+        BOOL opened = NO;
+        if (confirmed) {
+            if (!PostModelPowerShortcut()) {
+                CFRelease(application);
+                return Fail(
+                    @"macOS could not send the model picker shortcut."
+                );
+            }
+            opened = YES;
+        }
+        WriteJSON(
+            @{
+                @"alreadyOpen": @NO,
+                @"bundleIdentifier": bundleIdentifier,
+                @"compact": @(opened),
+                @"compactChanged": @NO,
+                @"open": @(opened),
+                @"opened": @(opened),
+                @"triggerLabel": NSNull.null,
+                @"triggerMatched": @0,
+            },
+            stdout
+        );
+        CFRelease(application);
+        return 0;
+    }
+
+    if ([operation isEqualToString:@"close"]) {
+        BOOL closed = NO;
+        if (confirmed) {
+            if (!PostKeyName(@"escape")) {
+                CFRelease(application);
+                return Fail(@"macOS could not create the Escape key event.");
+            }
+            closed = YES;
+        }
+        WriteJSON(
+            @{
+                @"alreadyClosed": @NO,
+                @"bundleIdentifier": bundleIdentifier,
+                @"closed": @(closed),
+                @"open": @(!closed),
+            },
+            stdout
+        );
+        CFRelease(application);
+        return 0;
+    }
+
+    if ([operation isEqualToString:@"adjust"]) {
+        BOOL sent = NO;
+        if (confirmed) {
+            if (!PostKeyName(@"home")) {
+                CFRelease(application);
+                return Fail(@"macOS could not focus the Power control.");
+            }
+            usleep(20000);
+            NSString *key = [direction isEqualToString:@"decrease"]
+                ? @"left"
+                : @"right";
+            if (!PostKeyName(key)) {
+                CFRelease(application);
+                return Fail(@"macOS could not adjust the Power control.");
+            }
+            sent = YES;
+        }
+        WriteJSON(
+            @{
+                @"atBoundary": NSNull.null,
+                @"bundleIdentifier": bundleIdentifier,
+                @"changed": NSNull.null,
+                @"compactChanged": @NO,
+                @"currentValue": NSNull.null,
+                @"direction": direction,
+                @"previousValue": NSNull.null,
+                @"sent": @(sent),
+            },
+            stdout
+        );
+        CFRelease(application);
+        return 0;
+    }
+
+    BOOL compactChanged = NO;
+    NSString *compactError = nil;
+    NSDictionary<NSString *, NSArray *> *menuSnapshot = nil;
+    if (!EnsureCompactModelPowerView(
+        application,
+        bundleIdentifier,
+        confirmed,
+        &compactChanged,
+        &menuSnapshot,
+        &compactError
+    )) {
+        CFRelease(application);
+        return Fail(compactError);
+    }
+
+    NSString *currentMode = ModelPowerSpeedModeFromSnapshot(menuSnapshot);
+    if (currentMode == nil) {
+        CFRelease(application);
+        return Fail(
+            @"Expected exactly one enabled Fast/Standard mode control."
+        );
+    }
+    BOOL alreadySelected = [currentMode isEqualToString:mode];
+    BOOL changed = NO;
+    BOOL selected = alreadySelected;
+    if (!alreadySelected && confirmed) {
+        NSString *label = [mode isEqualToString:@"fast"]
+            ? @"Enable fast mode"
+            : @"Enable standard mode";
+        NSArray *matches = menuSnapshot[label];
+        AXUIElementRef speedControl = matches.count == 1
+            ? (__bridge AXUIElementRef)matches.firstObject
+            : nil;
+        if (matches.count != 1
+            || !ClickElementCenter(speedControl)) {
+            CFRelease(application);
+            return Fail(@"Fast/Standard control could not be selected safely.");
+        }
+        NSString *expectedLabel = [mode isEqualToString:@"fast"]
+            ? @"Enable standard mode"
+            : @"Enable fast mode";
+        usleep(70000);
+        if ([ControlLabel(speedControl) isEqualToString:expectedLabel]) {
+            selected = YES;
+            changed = YES;
+            currentMode = mode;
+        }
+        for (NSUInteger attempt = 0;
+             !selected && attempt < 6;
+             attempt += 1) {
+            NSDictionary<NSString *, NSArray *> *updatedSnapshot =
+                ModelPowerMenuSnapshot(application);
+            if ([ModelPowerSpeedModeFromSnapshot(updatedSnapshot)
+                    isEqualToString:mode]) {
+                selected = YES;
+                changed = YES;
+                currentMode = mode;
+                break;
+            }
+            usleep(50000);
+        }
+        if (!selected) {
+            CFRelease(application);
+            return Fail(
+                @"Fast/Standard selection was not reflected by the live picker."
+            );
+        }
+    }
+    WriteJSON(
+        @{
+            @"alreadySelected": @(alreadySelected),
+            @"bundleIdentifier": bundleIdentifier,
+            @"changed": @(changed),
+            @"compactChanged": @(compactChanged),
+            @"currentMode": currentMode,
+            @"selected": @(selected),
+            @"targetMode": mode,
+        },
+        stdout
+    );
+    CFRelease(application);
     return 0;
 }
 
@@ -2543,6 +3179,10 @@ static void WriteUsage(void) {
         "  macos-control cycle-permission-mode --bundle-id ID [--confirm]\n"
         "  macos-control previous-chat --bundle-id ID [--confirm]\n"
         "  macos-control clear-input --bundle-id ID [--confirm]\n"
+        "  macos-control model-power "
+            "inspect|open|close|adjust|speed --bundle-id ID "
+            "[--direction decrease|increase] [--mode standard|fast] "
+            "[--confirm]\n"
         "  macos-control match --bundle-id ID --role ROLE --label EXACT\n"
         "  macos-control press --bundle-id ID "
             "--role button|menu-item|pop-up-button "
@@ -2631,6 +3271,11 @@ int main(int argc, const char *argv[]) {
         }
         if ([command isEqualToString:@"clear-input"]) {
             return ClearInput(
+                [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
+            );
+        }
+        if ([command isEqualToString:@"model-power"]) {
+            return ModelPower(
                 [arguments subarrayWithRange:NSMakeRange(1, arguments.count - 1)]
             );
         }

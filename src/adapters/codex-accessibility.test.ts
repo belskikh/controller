@@ -13,6 +13,11 @@ import type {
   ControlStatus,
   CyclePermissionModeResult,
   MatchResult,
+  ModelPowerAdjustResult,
+  ModelPowerCloseResult,
+  ModelPowerInspectResult,
+  ModelPowerOpenResult,
+  ModelPowerSpeedResult,
   PreviousChatResult,
   PressResult,
   SendKeyResult,
@@ -40,6 +45,29 @@ class FakeControlClient implements ControlClient {
     bundleIdentifier: string;
     confirm: boolean;
   }> = [];
+  readonly modelPowerCalls: Array<
+    | {
+      operation: "inspect";
+      bundleIdentifier: string;
+    }
+    | {
+      operation: "open" | "close";
+      bundleIdentifier: string;
+      confirm: boolean;
+    }
+    | {
+      operation: "adjust";
+      bundleIdentifier: string;
+      direction: "decrease" | "increase";
+      confirm: boolean;
+    }
+    | {
+      operation: "speed";
+      bundleIdentifier: string;
+      mode: "standard" | "fast";
+      confirm: boolean;
+    }
+  > = [];
   readonly calls: Array<{
     bundleIdentifier: string;
     role: ControlRole;
@@ -132,6 +160,106 @@ class FakeControlClient implements ControlClient {
       currentMode: "Ask for approval",
       selected: confirm,
       targetMode: confirm ? "Approve for me" : null,
+    };
+  }
+
+  async inspectModelPower(
+    bundleIdentifier: string,
+  ): Promise<ModelPowerInspectResult> {
+    this.modelPowerCalls.push({ operation: "inspect", bundleIdentifier });
+    return {
+      bundleIdentifier,
+      compact: false,
+      open: false,
+      powerMatched: 0,
+      speedMode: null,
+      triggerError: null,
+      triggerLabel: "5.6 Sol High",
+      triggerMatched: 1,
+      view: "closed",
+    };
+  }
+
+  async openModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerOpenResult> {
+    this.modelPowerCalls.push({
+      operation: "open",
+      bundleIdentifier,
+      confirm,
+    });
+    return {
+      alreadyOpen: false,
+      bundleIdentifier,
+      compact: confirm,
+      compactChanged: false,
+      open: confirm,
+      opened: confirm,
+      triggerLabel: "5.6 Sol High",
+      triggerMatched: 1,
+    };
+  }
+
+  async closeModelPower(
+    bundleIdentifier: string,
+    confirm: boolean,
+  ): Promise<ModelPowerCloseResult> {
+    this.modelPowerCalls.push({
+      operation: "close",
+      bundleIdentifier,
+      confirm,
+    });
+    return {
+      alreadyClosed: false,
+      bundleIdentifier,
+      closed: confirm,
+      open: !confirm,
+    };
+  }
+
+  async adjustModelPower(
+    bundleIdentifier: string,
+    direction: "decrease" | "increase",
+    confirm: boolean,
+  ): Promise<ModelPowerAdjustResult> {
+    this.modelPowerCalls.push({
+      operation: "adjust",
+      bundleIdentifier,
+      direction,
+      confirm,
+    });
+    return {
+      atBoundary: false,
+      bundleIdentifier,
+      changed: confirm,
+      compactChanged: false,
+      currentValue: confirm ? "5.6 Sol Medium" : "5.6 Sol High",
+      direction,
+      previousValue: "5.6 Sol High",
+      sent: confirm,
+    };
+  }
+
+  async setModelPowerSpeed(
+    bundleIdentifier: string,
+    mode: "standard" | "fast",
+    confirm: boolean,
+  ): Promise<ModelPowerSpeedResult> {
+    this.modelPowerCalls.push({
+      operation: "speed",
+      bundleIdentifier,
+      mode,
+      confirm,
+    });
+    return {
+      alreadySelected: false,
+      bundleIdentifier,
+      changed: confirm,
+      compactChanged: false,
+      currentMode: mode === "fast" ? "standard" : "fast",
+      selected: confirm,
+      targetMode: mode,
     };
   }
 
@@ -312,6 +440,156 @@ describe("CodexAccessibilityAdapter", () => {
     ]);
     expect(liveClient.permissionModeCycles).toEqual([
       { bundleIdentifier: CODEX_BUNDLE_IDENTIFIER, confirm: true },
+    ]);
+  });
+
+  it("opens the compact model picker only when mutations are enabled", async () => {
+    const dryRunClient = new FakeControlClient();
+    const liveClient = new FakeControlClient();
+
+    await expect(
+      new CodexAccessibilityAdapter(dryRunClient).openModelPower(),
+    ).resolves.toBe(false);
+    await expect(
+      new CodexAccessibilityAdapter(liveClient, true).openModelPower(),
+    ).resolves.toBe(true);
+
+    expect(dryRunClient.modelPowerCalls).toEqual([
+      {
+        operation: "open",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        confirm: false,
+      },
+    ]);
+    expect(liveClient.modelPowerCalls).toEqual([
+      {
+        operation: "open",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        confirm: true,
+      },
+    ]);
+  });
+
+  it("adjusts compact Power in both directions", async () => {
+    const client = new FakeControlClient();
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await adapter.adjustModelPower(-1);
+    await adapter.adjustModelPower(1);
+
+    expect(client.modelPowerCalls).toEqual([
+      {
+        operation: "adjust",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        direction: "decrease",
+        confirm: true,
+      },
+      {
+        operation: "adjust",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        direction: "increase",
+        confirm: true,
+      },
+    ]);
+  });
+
+  it("accepts a Power endpoint as a successful no-op", async () => {
+    const client = new FakeControlClient();
+    client.adjustModelPower = async (
+      bundleIdentifier,
+      direction,
+      confirm,
+    ) => ({
+      atBoundary: true,
+      bundleIdentifier,
+      changed: false,
+      compactChanged: false,
+      currentValue: "5.6 Sol High",
+      direction,
+      previousValue: "5.6 Sol High",
+      sent: confirm,
+    });
+
+    await expect(
+      new CodexAccessibilityAdapter(client, true).adjustModelPower(1),
+    ).resolves.toBeUndefined();
+  });
+
+  it("selects compact Fast and Standard modes", async () => {
+    const client = new FakeControlClient();
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await adapter.setModelPowerSpeed("fast");
+    await adapter.setModelPowerSpeed("standard");
+
+    expect(client.modelPowerCalls).toEqual([
+      {
+        operation: "speed",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        mode: "fast",
+        confirm: true,
+      },
+      {
+        operation: "speed",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        mode: "standard",
+        confirm: true,
+      },
+    ]);
+  });
+
+  it("accepts an already-selected speed as an idempotent success", async () => {
+    const client = new FakeControlClient();
+    client.setModelPowerSpeed = async (
+      bundleIdentifier,
+      mode,
+    ) => ({
+      alreadySelected: true,
+      bundleIdentifier,
+      changed: false,
+      compactChanged: false,
+      currentMode: mode,
+      selected: true,
+      targetMode: mode,
+    });
+
+    await expect(
+      new CodexAccessibilityAdapter(client, true).setModelPowerSpeed("fast"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("fails closed when the model shortcut does not open the picker", async () => {
+    const client = new FakeControlClient();
+    client.openModelPower = async (
+      bundleIdentifier,
+    ) => ({
+      alreadyOpen: false,
+      bundleIdentifier,
+      compact: false,
+      compactChanged: false,
+      open: false,
+      opened: false,
+      triggerLabel: null,
+      triggerMatched: 0,
+    });
+
+    await expect(
+      new CodexAccessibilityAdapter(client, true).openModelPower(),
+    ).rejects.toThrow(/did not open/);
+  });
+
+  it("closes the compact model picker idempotently", async () => {
+    const client = new FakeControlClient();
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await adapter.closeModelPower();
+
+    expect(client.modelPowerCalls).toEqual([
+      {
+        operation: "close",
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        confirm: true,
+      },
     ]);
   });
 

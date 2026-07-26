@@ -18,6 +18,9 @@
     "circle": {
       "press": "focusCodex"
     },
+    "left.stick.button": {
+      "press": "modelPower.toggle"
+    },
     "create": {
       "press": "newThread"
     },
