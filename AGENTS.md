@@ -19,7 +19,6 @@ paired controller and should be treated as the working baseline.
   reconnect, adapter errors, and shutdown.
 - Never use hard-coded screen coordinates. Resolve a unique live
   Accessibility element and derive any mouse click from its current AX frame.
-- Keep Cursor, Handy, and general pointer control out of this project.
 - Do not install or load the generated launchd agent without explicit user
   authorization.
 
