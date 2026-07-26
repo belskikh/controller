@@ -219,6 +219,22 @@ class FakeControlClient implements ControlClient {
       pressed: confirm,
     };
   }
+
+  async pressOneOf(
+    bundleIdentifier: string,
+    role: ControlRole,
+    labels: readonly string[],
+    confirm: boolean,
+    method?: ControlMethod,
+  ): Promise<PressResult> {
+    return this.press(
+      bundleIdentifier,
+      role,
+      labels[0] ?? "",
+      confirm,
+      method,
+    );
+  }
 }
 
 describe("CodexVoiceAccessibilityAdapter", () => {

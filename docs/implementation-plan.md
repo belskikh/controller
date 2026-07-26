@@ -69,8 +69,9 @@ on the actual paired controller.
 
 1. Detect Codex as the frontmost app.
 2. Inspect the focused window for visible approval controls.
-3. Map `Allow once`, `Allow similar commands`, and `Deny` only when a matching
-   control exists.
+3. Map `Allow once`, `Deny`, and the single broader approval option offered by
+   Codex (`Allow similar commands` or `Allow all edits`) only when a unique
+   matching control exists.
 4. Map interrupt and task navigation through verified UI actions or
    known shortcuts.
 5. Add a dry-run trace showing the intended target before enabling mutations.
@@ -81,6 +82,8 @@ Validated on the paired Bluetooth controller:
 - `L2` clicked the exact `Deny` button and rejected a harmless command.
 - `R1` opened `Approval options`, clicked the exact
   `Allow similar commands` menu item, and completed a harmless command.
+- R1 also clicked the exact `Allow all edits` menu item during an edit approval
+  and completed a harmless temporary-file operation.
 - `Square` clicked the exact `Stop` control and interrupted a running Codex
   operation.
 - `D-pad up` and `D-pad down` navigate visually up and down through Codex task
@@ -185,6 +188,7 @@ Fast/Standard retains one bounded live-menu lookup.
 | --- | --- | --- |
 | R2 | Allow once | Passed |
 | R1 | Allow similar commands | Passed |
+| R1 | Allow all edits | Passed |
 | L2 | Deny | Passed |
 | Square | Stop current operation | Passed |
 | L1 | Toggle between last two opened tasks | Passed |

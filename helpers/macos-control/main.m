@@ -889,6 +889,50 @@ static void CollectExactMatches(
     }
 }
 
+static void CollectExactMatchesForLabels(
+    AXUIElementRef element,
+    NSString *requiredRole,
+    NSSet<NSString *> *requiredLabels,
+    NSUInteger depth,
+    NSUInteger maxDepth,
+    NSMutableArray *matches
+) {
+    if (depth > maxDepth || matches.count > 1) {
+        return;
+    }
+    NSString *role = StringAttribute(element, kAXRoleAttribute);
+    NSString *label = ControlLabel(element);
+    id enabled = CopyAttribute(element, kAXEnabledAttribute);
+    if ([role isEqualToString:requiredRole]
+        && label != nil
+        && [requiredLabels containsObject:label]
+        && [enabled isKindOfClass:NSNumber.class]
+        && [enabled boolValue]) {
+        [matches addObject:(__bridge id)element];
+    }
+
+    id rawChildren = CopyAttribute(element, kAXChildrenAttribute);
+    if (![rawChildren isKindOfClass:NSArray.class]) {
+        return;
+    }
+    for (id child in (NSArray *)rawChildren) {
+        if (CFGetTypeID((__bridge CFTypeRef)child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        CollectExactMatchesForLabels(
+            (__bridge AXUIElementRef)child,
+            requiredRole,
+            requiredLabels,
+            depth + 1,
+            maxDepth,
+            matches
+        );
+        if (matches.count > 1) {
+            return;
+        }
+    }
+}
+
 static NSString *AccessibilityRole(NSString *roleName) {
     if ([roleName isEqualToString:@"button"]) {
         return (__bridge NSString *)kAXButtonRole;
@@ -2581,7 +2625,7 @@ static int PressControl(NSArray<NSString *> *arguments) {
     }
 
     NSString *bundleIdentifier = nil;
-    NSString *label = nil;
+    NSMutableArray<NSString *> *labels = [NSMutableArray array];
     NSString *roleName = @"button";
     NSString *method = @"ax";
     BOOL confirmed = NO;
@@ -2594,10 +2638,11 @@ static int PressControl(NSArray<NSString *> *arguments) {
             }
             index += 2;
         } else if ([argument isEqualToString:@"--label"]) {
-            label = ValueAfter(arguments, index);
+            NSString *label = ValueAfter(arguments, index);
             if (label == nil) {
                 return Fail(@"--label requires a value.");
             }
+            [labels addObject:label];
             index += 2;
         } else if ([argument isEqualToString:@"--role"]) {
             roleName = ValueAfter(arguments, index);
@@ -2621,8 +2666,12 @@ static int PressControl(NSArray<NSString *> *arguments) {
         }
     }
 
-    if (bundleIdentifier.length == 0 || label.length == 0) {
-        return Fail(@"press requires --bundle-id and --label.");
+    if (bundleIdentifier.length == 0 || labels.count == 0) {
+        return Fail(@"press requires --bundle-id and at least one --label.");
+    }
+    NSSet<NSString *> *requiredLabels = [NSSet setWithArray:labels];
+    if (requiredLabels.count != labels.count) {
+        return Fail(@"press requires unique --label values.");
     }
     if (![method isEqualToString:@"ax"]
         && ![method isEqualToString:@"mouse"]
@@ -2659,10 +2708,10 @@ static int PressControl(NSArray<NSString *> *arguments) {
 
     NSMutableArray *matches = [NSMutableArray array];
     for (id root in roots) {
-        CollectExactMatches(
+        CollectExactMatchesForLabels(
             (__bridge AXUIElementRef)root,
             requiredRole,
-            label,
+            requiredLabels,
             0,
             30,
             matches
@@ -2676,15 +2725,16 @@ static int PressControl(NSArray<NSString *> *arguments) {
         CFRelease(application);
         return Fail(
             [NSString stringWithFormat:
-                @"Expected exactly one enabled %@ named \"%@\"; found %lu.",
+                @"Expected exactly one enabled %@ matching %@; found %lu.",
                 roleName,
-                label,
+                labels,
                 (unsigned long)matches.count]
         );
     }
 
     AXUIElementRef matchedElement =
         (__bridge AXUIElementRef)matches.firstObject;
+    NSString *label = ControlLabel(matchedElement);
     NSArray<NSString *> *actions = ActionNames(matchedElement);
     NSDictionary *position = PointAttribute(
         matchedElement,
@@ -3208,7 +3258,8 @@ static void WriteUsage(void) {
         "  macos-control match --bundle-id ID --role ROLE --label EXACT\n"
         "  macos-control press --bundle-id ID "
             "--role button|menu-item|pop-up-button "
-            "--label EXACT [--method ax|mouse|pick] [--confirm]\n"
+            "--label EXACT [--label EXACT ...] "
+            "[--method ax|mouse|pick] [--confirm]\n"
         "  macos-control pointer-stream --bundle-id ID\n"
         "  macos-control key --key NAME [--modifiers cmd,shift] "
             "[--hold-ms 20] [--confirm]\n\n"

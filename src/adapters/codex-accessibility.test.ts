@@ -75,6 +75,19 @@ class FakeControlClient implements ControlClient {
     confirm: boolean;
     method?: ControlMethod;
   }> = [];
+  readonly matches: Array<{
+    bundleIdentifier: string;
+    role: ControlRole;
+    label: string;
+  }> = [];
+  readonly matchCounts = new Map<string, number>();
+  readonly pressOneOfCalls: Array<{
+    bundleIdentifier: string;
+    role: ControlRole;
+    labels: readonly string[];
+    confirm: boolean;
+    method?: ControlMethod;
+  }> = [];
   statusValue: ControlStatus = {
     accessibilityTrusted: true,
     frontmostApplication: {
@@ -120,7 +133,13 @@ class FakeControlClient implements ControlClient {
     role: ControlRole,
     label: string,
   ): Promise<MatchResult> {
-    return { bundleIdentifier, role, label, matched: 1 };
+    this.matches.push({ bundleIdentifier, role, label });
+    return {
+      bundleIdentifier,
+      role,
+      label,
+      matched: this.matchCounts.get(label) ?? 0,
+    };
   }
 
   async key(
@@ -285,6 +304,45 @@ class FakeControlClient implements ControlClient {
       pressed: confirm,
     };
   }
+
+  async pressOneOf(
+    bundleIdentifier: string,
+    role: ControlRole,
+    labels: readonly string[],
+    confirm: boolean,
+    method?: ControlMethod,
+  ): Promise<PressResult> {
+    this.pressOneOfCalls.push({
+      bundleIdentifier,
+      role,
+      labels,
+      confirm,
+      ...(method === undefined ? {} : { method }),
+    });
+    const matched = labels.reduce(
+      (count, label) => count + (this.matchCounts.get(label) ?? 0),
+      0,
+    );
+    const label = labels.find(
+      (candidate) => this.matchCounts.get(candidate) === 1,
+    ) ?? labels[0] ?? "";
+    if (matched === 1) {
+      this.calls.push({
+        bundleIdentifier,
+        role,
+        label,
+        confirm,
+        ...(method === undefined ? {} : { method }),
+      });
+    }
+    return {
+      bundleIdentifier,
+      role,
+      label,
+      matched,
+      pressed: confirm && matched === 1,
+    };
+  }
 }
 
 describe("CodexAccessibilityAdapter", () => {
@@ -333,6 +391,7 @@ describe("CodexAccessibilityAdapter", () => {
 
   it("selects the confirmed similar-command option", async () => {
     const client = new FakeControlClient();
+    client.matchCounts.set("Allow similar commands", 1);
     const adapter = new CodexAccessibilityAdapter(client, true);
 
     await adapter.allowSimilarCommands();
@@ -355,6 +414,71 @@ describe("CodexAccessibilityAdapter", () => {
     ]);
   });
 
+  it("selects the confirmed all-edits option", async () => {
+    const client = new FakeControlClient();
+    client.matchCounts.set("Allow all edits", 1);
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await adapter.allowSimilarCommands();
+
+    expect(client.calls).toEqual([
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "pop-up-button",
+        label: "Approval options",
+        confirm: true,
+        method: "mouse",
+      },
+      {
+        bundleIdentifier: CODEX_BUNDLE_IDENTIFIER,
+        role: "menu-item",
+        label: "Allow all edits",
+        confirm: true,
+        method: "mouse",
+      },
+    ]);
+  });
+
+  it("fails closed when no supported approval option exists", async () => {
+    const client = new FakeControlClient();
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await expect(adapter.allowSimilarCommands()).rejects.toThrow(
+      /exactly one supported approval/,
+    );
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.pressOneOfCalls[0]?.labels).toEqual([
+      "Allow similar commands",
+      "Allow all edits",
+    ]);
+  });
+
+  it("fails closed when both supported approval options exist", async () => {
+    const client = new FakeControlClient();
+    client.matchCounts.set("Allow similar commands", 1);
+    client.matchCounts.set("Allow all edits", 1);
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await expect(adapter.allowSimilarCommands()).rejects.toThrow(
+      /exactly one supported approval/,
+    );
+
+    expect(client.calls).toHaveLength(1);
+  });
+
+  it("fails closed when a supported approval option is ambiguous", async () => {
+    const client = new FakeControlClient();
+    client.matchCounts.set("Allow all edits", 2);
+    const adapter = new CodexAccessibilityAdapter(client, true);
+
+    await expect(adapter.allowSimilarCommands()).rejects.toThrow(
+      /exactly one supported approval/,
+    );
+
+    expect(client.calls).toHaveLength(1);
+  });
+
   it("does not open the approval menu in dry-run mode", async () => {
     const client = new FakeControlClient();
     const adapter = new CodexAccessibilityAdapter(client);
@@ -370,6 +494,8 @@ describe("CodexAccessibilityAdapter", () => {
         method: "mouse",
       },
     ]);
+    expect(client.matches).toHaveLength(0);
+    expect(client.pressOneOfCalls).toHaveLength(0);
   });
 
   it("fails closed when Codex is not frontmost", async () => {

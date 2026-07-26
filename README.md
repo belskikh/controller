@@ -48,7 +48,7 @@ Desktop on macOS. Other controllers and AI applications are not supported yet.
 | `D-pad right` | Start dictation, then transcribe and send |
 | `Mute` | Cancel dictation without sending |
 | `R2` | Allow once |
-| `R1` | Open approval options and allow similar commands |
+| `R1` | Open approval options and allow similar commands or all edits |
 | `L2` | Deny |
 | `Square` | Stop the current operation |
 | `Triangle` | Clear the current input draft |

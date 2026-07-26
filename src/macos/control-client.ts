@@ -173,6 +173,13 @@ export interface ControlClient {
     confirm: boolean,
     method?: ControlMethod,
   ): Promise<PressResult>;
+  pressOneOf(
+    bundleIdentifier: string,
+    role: ControlRole,
+    labels: readonly string[],
+    confirm: boolean,
+    method?: ControlMethod,
+  ): Promise<PressResult>;
 }
 
 export class MacOSControlError extends Error {
@@ -352,6 +359,27 @@ export class MacOSControlClient implements ControlClient {
       role,
       "--label",
       label,
+      "--method",
+      method,
+      ...(confirm ? ["--confirm"] : []),
+    ];
+    return this.run<PressResult>(arguments_);
+  }
+
+  async pressOneOf(
+    bundleIdentifier: string,
+    role: ControlRole,
+    labels: readonly string[],
+    confirm: boolean,
+    method: ControlMethod = "ax",
+  ): Promise<PressResult> {
+    const arguments_ = [
+      "press",
+      "--bundle-id",
+      bundleIdentifier,
+      "--role",
+      role,
+      ...labels.flatMap((label) => ["--label", label]),
       "--method",
       method,
       ...(confirm ? ["--confirm"] : []),

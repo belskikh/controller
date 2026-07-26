@@ -9,6 +9,7 @@ export const CODEX_BUNDLE_IDENTIFIER = "com.openai.codex";
 export interface CodexControlLabels {
   accept: string;
   approvalOptions: string;
+  allowAllEdits: string;
   allowSimilarCommands: string;
   decline: string;
   interrupt: string;
@@ -20,6 +21,7 @@ export interface CodexControlLabels {
 export const DEFAULT_CODEX_CONTROL_LABELS: CodexControlLabels = {
   accept: "Allow once",
   approvalOptions: "Approval options",
+  allowAllEdits: "Allow all edits",
   allowSimilarCommands: "Allow similar commands",
   decline: "Deny",
   interrupt: "Stop",
@@ -56,7 +58,7 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
   async allowSimilarCommands(): Promise<void> {
     await this.press("pop-up-button", this.labels.approvalOptions);
     if (this.mutationsEnabled) {
-      await this.press("menu-item", this.labels.allowSimilarCommands);
+      await this.pressApprovalOption();
     }
   }
 
@@ -208,6 +210,31 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
     await this.press("menu-item", label);
   }
 
+  private async pressApprovalOption(): Promise<void> {
+    const labels = [
+      this.labels.allowSimilarCommands,
+      this.labels.allowAllEdits,
+    ];
+    await this.assertFrontmost();
+    const result = await this.client.pressOneOf(
+      CODEX_BUNDLE_IDENTIFIER,
+      "menu-item",
+      labels,
+      this.mutationsEnabled,
+      "mouse",
+    );
+    if (result.matched !== 1 || !labels.includes(result.label)) {
+      throw new CodexAccessibilityError(
+        "Expected exactly one supported approval menu item.",
+      );
+    }
+    if (result.pressed !== this.mutationsEnabled) {
+      throw new CodexAccessibilityError(
+        `Unexpected press result for "${result.label}".`,
+      );
+    }
+  }
+
   private async press(role: ControlRole, label: string): Promise<void> {
     await this.assertFrontmost();
     const result = await this.client.press(
@@ -215,7 +242,9 @@ export class CodexAccessibilityAdapter implements AgentAdapter {
       role,
       label,
       this.mutationsEnabled,
-      role === "menu-item" && label !== this.labels.allowSimilarCommands
+      role === "menu-item"
+          && label !== this.labels.allowSimilarCommands
+          && label !== this.labels.allowAllEdits
         ? "ax"
         : "mouse",
     );
